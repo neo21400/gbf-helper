@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8">
+    <title>GBF Helper Pro</title>
+    <style>
+        #repeat-count::-webkit-outer-spin-button,
+        #repeat-count::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        #repeat-count {
+            -moz-appearance: textfield;
+        }
+
+        body {
+            background: #121212;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 8px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+            min-width: 50px;
+            overflow: hidden;
+            /* Основное окно не скроллим, только список */
+        }
+
+        /* КОМПАКТНЫЙ РЕЖИМ (MINI) */
+        body.mini {
+            padding: 5px 2px;
+        }
+
+        body.mini h1,
+        body.mini .hide-mini,
+        body.mini .section-label,
+        body.mini .label {
+            display: none !important;
+        }
+
+        body.mini #status-display {
+            padding: 4px;
+            border-left-width: 2px;
+            margin-bottom: 5px;
+        }
+
+        body.mini #status-display div {
+            font-size: 10px !important;
+        }
+
+        body.mini .status-bar span {
+            display: none;
+        }
+
+        body.mini .row {
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        body.mini button {
+            font-size: 10px;
+            padding: 5px 2px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 15px;
+            margin: 0 0 8px 0;
+            color: #0288d1;
+            text-align: center;
+        }
+
+        #status-display {
+            background: #1e1e1e;
+            padding: 6px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            border-left: 4px solid #0288d1;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Список шагов с прокруткой */
+        #steps-container {
+            flex: 1;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #181818;
+            overflow-y: auto;
+            margin-bottom: 6px;
+            min-height: 50px;
+        }
+
+        .step-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-bottom: 1px solid #222;
+            font-size: 12px;
+        }
+
+        .step-item.active-step-highlight {
+            background: rgba(2, 136, 209, 0.2);
+            border-left: 3px solid #0288d1;
+            color: #fff;
+        }
+
+        .btn-delete-step {
+            background: rgba(198, 40, 40, 0.2);
+            color: #ff8a80;
+            border: 1px solid #c62828;
+            border-radius: 3px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 10px;
+            flex: none !important;
+            /* Убираем растягивание */
+            transition: all 0.2s;
+        }
+
+        .btn-delete-step:hover {
+            background: #c62828;
+            color: white;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #888;
+        }
+
+        input,
+        select {
+            background: #222;
+            color: white;
+            border: 1px solid #444;
+            padding: 4px;
+            border-radius: 4px;
+            flex: 1;
+            font-size: 11px;
+        }
+
+        button {
+            padding: 6px;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            flex: 1;
+            transition: background 0.2s;
+            font-size: 11px;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .active-record {
+            background: #b71c1c !important;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .active-play {
+            background: #1b5e20 !important;
+            color: white;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            margin-top: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            background: #555;
+        }
+
+        .status-dot.recording {
+            background: #f44336;
+            box-shadow: 0 0 5px #f44336;
+        }
+
+        .status-dot.playing {
+            background: #4caf50;
+            box-shadow: 0 0 5px #4caf50;
+        }
+
+        .status-dot.captcha {
+            background: #ff9800;
+            box-shadow: 0 0 5px #ff9800;
+        }
+
+        .section-label {
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+
+        .inline-confirm {
+            position: absolute;
+            z-index: 1000;
+            left: 10px;
+            right: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #1a1a2e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-top: 4px;
+            font-size: 12px;
+            color: #ccc;
+            animation: fadeIn 0.15s ease;
+        }
+
+        .inline-confirm span {
+            flex: 1;
+        }
+
+        .inline-confirm .ic-yes {
+            background: #b71c1c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: none;
+        }
+
+        .inline-confirm .ic-no {
+            background: #333;
+            color: #aaa;
+            border: 1px solid #555;
+            border-radius: 3px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: none;
+        }
+
+        .inline-confirm .ic-yes:hover {
+            background: #d32f2f;
+        }
+
+        .inline-confirm .ic-no:hover {
+            background: #444;
+            color: white;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        .inline-input {
+            position: absolute;
+            z-index: 1000;
+            left: 10px;
+            right: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #1a1a2e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-top: 4px;
+            animation: fadeIn 0.15s ease;
+        }
+
+        .inline-input span {
+            font-size: 12px;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        .inline-input .ii-field {
+            flex: 1;
+            background: #111;
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: white;
+            font-size: 11px;
+            padding: 3px 6px;
+            min-width: 0;
+        }
+
+        .inline-input .ii-field:focus {
+            outline: none;
+            border-color: #0288d1;
+        }
+
+        .inline-input .ii-ok {
+            background: #0288d1;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: none;
+        }
+
+        .inline-input .ii-cancel {
+            background: transparent;
+            color: #666;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 3px 6px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: none;
+        }
+
+        .inline-input .ii-ok:hover {
+            background: #0277bd;
+        }
+
+        .inline-input .ii-cancel:hover {
+            color: #aaa;
+        }
+
+        /* Settings Modal */
+        #settings-modal {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(18, 18, 18, 0.98);
+            z-index: 2000;
+            padding: 15px;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        #settings-modal.active {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+
+        .modal-title {
+            font-weight: bold;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .btn-close {
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            flex: none !important;
+        }
+
+        .btn-close:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .settings-group {
+            background: #1a1a2e;
+            border: 1px solid #333;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .settings-group-title {
+            font-size: 10px;
+            color: #ffca28;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .settings-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .settings-label {
+            font-size: 11px;
+            color: #bbb;
+            width: 75px;
+            flex-shrink: 0;
+            line-height: 1.2;
+        }
+
+        /* Слайдеры занимают всё свободное место */
+        .settings-row input[type="range"] {
+            flex: 1;
+            height: 4px;
+            cursor: pointer;
+            margin: 0 4px;
+            min-width: 0;
+        }
+
+        /* Числовые поля и выпадающие списки всегда прижаты к правому краю */
+        .settings-row input[type="number"],
+        .settings-row select {
+            background: #111;
+            border: 1px solid #444;
+            color: #fff;
+            font-size: 11px;
+            padding: 3px 2px;
+            text-align: center;
+            border-radius: 4px;
+            flex: none;
+            box-sizing: border-box;
+        }
+
+        .settings-row input[type="number"] {
+            width: 35px;
+            -moz-appearance: textfield;
+        }
+
+        .settings-row input::-webkit-outer-spin-button,
+        .settings-row input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .settings-row select {
+            width: auto;
+            text-align: left;
+            padding: 3px 20px 3px 8px;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 5px center;
+            background-size: 10px;
+        }
+
+        /* Контейнер для выталкивания элементов вправо, если нет слайдера */
+        .settings-spacer {
+            flex: 1;
+        }
+
+        /* Специальный контейнер для диапазона */
+        .range-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            justify-content: flex-end;
+            min-width: 0;
+        }
+
+        .range-container input {
+            width: 38px !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="flex: 0 0 50px; text-align: left;">
+            <!-- Button removed -->
+        </div>
+        <h1 style="margin: 0; text-align: center; flex: 1;">⚔ GBF Helper Pro</h1>
+        <div style="flex: 0 0 45px; text-align: right;">
+            <button id="btn-settings-open"
+                style="background: none; border: none; font-size: 18px; padding: 0; color: #888; cursor: pointer; line-height: 1;"
+                title="Настройки">⚙</button>
+        </div>
+    </div>
+
+    <div id="status-display">
+        <div style="font-weight: bold; font-size: 13px; display: flex; align-items: center;">
+            Цикл: <span id="current-rep">0</span> / <span id="total-reps-display"> 0</span>
+            <div style="flex: 1;"></div>
+            <div class="status-dot" id="status-dot" style="margin-right: 4px; margin-top: 0;"></div>
+            <span id="status-text" style="font-size: 11px; font-weight: normal; color: #aaa;">Готов</span>
+        </div>
+        <div style="font-size: 11px; color: #aaa; margin-top: 3px;">
+            Шаг: <span id="current-step-name">-</span>
+        </div>
+    </div>
+
+    <div class="row">
+        <button id="btn-record" style="flex: 1; padding: 8px; font-weight: bold; background: #b71c1c;">⏺ Запись</button>
+    </div>
+
+    <div id="steps-container">
+        <div id="steps-list">
+            <div style="padding: 20px; text-align: center; color: #555; font-size: 12px;">Список пуст</div>
+        </div>
+    </div>
+
+    <div class="row" style="margin-bottom: 4px; opacity: 0.8;">
+        <button id="btn-clear-steps" style="padding: 4px; font-size: 10px;">🗑 Очистить шаги</button>
+    </div>
+
+    <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
+    <div class="row">
+        <select id="pattern-select">
+            <option value="">— выбрать —</option>
+        </select>
+        <button id="btn-save" style="flex: 0 0 32px; padding: 4px;">💾</button>
+        <button id="btn-delete-pattern" style="flex: 0 0 32px; padding: 4px;">🗑</button>
+    </div>
+    <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
+    <div class="row" style="align-items: stretch; margin-bottom: 8px;">
+        <div style="display: flex; flex-direction: column; flex: 0 0 65px; overflow: hidden;">
+            <span class="label" style="font-size: 9px; margin-bottom: 2px;">Повторов:</span>
+            <div style="display: flex; gap: 2px;">
+                <input type="number" id="repeat-count" value="1" min="1"
+                    style="min-width: 0; box-sizing: border-box; text-align: center; flex: 1;">
+                <button id="btn-auto-reps" title="Считать по AP" style="font-size: 10px; padding: 0 5px; background: #1e3a5f; color: #b3e5fc;
+                   border: 1px solid #2f5d90; border-radius: 3px; cursor: pointer; flex: none;">⚡</button>
+            </div>
+        </div>
+        <button id="btn-play" style="flex: 1; background: #0288d1; font-weight: bold; font-size: 13px;">▶
+            ЗАПУСК</button>
+        <button id="btn-pause"
+            style="flex: 0 0 40px; background: #f57c00; font-weight: bold; font-size: 13px; display: none;"
+            title="Пауза">⏸</button>
+    </div>
+
+    <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
+
+
+    <!-- Modal -->
+    <div id="settings-modal">
+        <div class="modal-header">
+            <div class="modal-title">Настройки</div>
+            <button id="btn-settings-close" class="btn-close">×</button>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Звуковые уведомления</div>
+            <div class="settings-row">
+                <span class="settings-label">Громкость:</span>
+                <input type="range" id="audio-volume" min="0" max="1" step="0.1" value="0.5">
+                <span id="volume-label" style="font-size:11px; color:#aaa; min-width:35px; text-align:right;">50%</span>
+            </div>
+            <div class="settings-row">
+                <span class="settings-label">Повторов: <br><span style="font-size:9px; color:#666;">(0 =
+                        выкл)</span></span>
+                <div class="settings-spacer"></div>
+                <input type="number" id="audio-repeats" value="3" min="0" max="10">
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Задержки (Живой ввод)</div>
+
+            <div class="settings-row">
+                <span class="settings-label">Режим:</span>
+                <div class="settings-spacer"></div>
+                <select id="delay-mode">
+                    <option value="percent">Проценты (±%)</option>
+                    <option value="capped">Проценты + Лимит</option>
+                    <option value="range">Диапазон (±мс)</option>
+                </select>
+            </div>
+
+            <!-- Mode: Percent & Capped -->
+            <div id="mode-params-percent" class="settings-row">
+                <span class="settings-label">Разброс (%):</span>
+                <input type="range" id="jitter-percent" min="0" max="100" step="1" value="15">
+                <input type="number" id="jitter-percent-num" min="0" max="100" value="15">
+            </div>
+
+            <!-- Mode: Capped only -->
+            <div id="mode-params-capped" class="settings-row" style="display:none;">
+                <span class="settings-label">Лимит (мс):</span>
+                <input type="range" id="jitter-cap" min="50" max="2000" step="50" value="500">
+                <input type="number" id="jitter-cap-num" min="50" max="5000" value="500">
+            </div>
+
+            <!-- Mode: Range -->
+            <div id="mode-params-range" class="settings-row" style="display:none;">
+                <span class="settings-label">Диапазон:</span>
+                <div class="range-container">
+                    <input type="number" id="jitter-min" value="-150">
+                    <span style="color:#555;">...</span>
+                    <input type="number" id="jitter-max" value="300">
+                    <span style="font-size:10px; color:#666;">мс</span>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <span class="settings-label">Доп. (мс):</span>
+                <input type="range" id="jitter-flat" min="0" max="2000" step="50" value="300">
+                <input type="number" id="jitter-flat-num" min="0" max="5000" value="300">
+            </div>
+
+            <div class="settings-row" style="margin-top: 5px; border-top: 1px solid #222; padding-top: 8px;">
+                <span class="settings-label">Скорость:</span>
+                <input type="range" id="speed-slider" min="0.5" max="5.0" step="0.1" value="1.0">
+                <input type="number" id="speed-num" min="0.5" max="10.0" step="0.1" value="1.0">
+            </div>
+
+            <div style="font-size: 9px; color: #666; margin-top: 8px; text-align: center; border-top: 1px dashed #333; padding-top: 5px;"
+                id="delay-formula-hint">Delay = ((Rec * Jitter%) + Extra) * Speed</div>
+        </div>
+
+        <div class="settings-group">
+            <button id="btn-viz"
+                style="width: 100%; background:#1a2a1a; color:#4caf50; font-size:11px; padding:8px; border:1px solid #2d4a2d;">👁
+                Viz (Визуализация): <span id="viz-state">ВЫКЛ</span></button>
+        </div>
+    </div>
+
+    <script src="panel.js"></script>
+</body>
+
+</html>

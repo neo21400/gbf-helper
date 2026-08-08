@@ -1,0 +1,119 @@
+name: Release
+
+# Тег вида v1.3 собирает оба варианта расширения и публикует их в релиз.
+# Собирается именно то, что лежит в теге, — руками архивы не пакуем, иначе
+# «сборка без кликера» рано или поздно разъедется с основной.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Кнопка обновления в расширении сравнивает свою версию с manifest.json
+      # в main, поэтому расхождение тега и манифеста означало бы релиз, про
+      # который никто не узнает
+      - name: Check tag matches manifest version
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME#v}"
+          main_version=$(node -pe "require('./manifest.json').version")
+          nodebug_version=$(node -pe "require('./manifest (no debugger).json').version")
+          echo "tag=$tag manifest=$main_version no-debugger=$nodebug_version"
+          if [ "$tag" != "$main_version" ] || [ "$tag" != "$nodebug_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match both manifests"
+            exit 1
+          fi
+
+      # Обе сборки обязаны иметь одинаковый key: он фиксирует ID расширения,
+      # а с ним и общее chrome.storage при переходе с одной сборки на другую
+      - name: Check both manifests share the same key
+        run: |
+          set -eu
+          a=$(node -pe "require('./manifest.json').key || ''")
+          b=$(node -pe "require('./manifest (no debugger).json').key || ''")
+          if [ -z "$a" ] || [ "$a" != "$b" ]; then
+            echo "::error::Manifest key is missing or differs between builds"
+            exit 1
+          fi
+
+      - name: Build both variants
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+
+          # git archive кладёт в сборку только отслеживаемые файлы: ни .git,
+          # ни служебных каталогов в архив не утечёт
+          stage() {
+            rm -rf build
+            mkdir -p build/gbf-helper
+            git archive HEAD | tar -x -C build/gbf-helper
+            rm -rf build/gbf-helper/.github
+          }
+
+          # С кликером: всё как в репозитории, запасной манифест в архиве не нужен
+          stage
+          rm -f 'build/gbf-helper/manifest (no debugger).json'
+          (cd build && zip -qr "../gbf-helper-$version.zip" gbf-helper)
+
+          # Без кликера: папка clicker/ убрана, манифест без права debugger
+          # встаёт на место основного
+          stage
+          rm -rf build/gbf-helper/clicker
+          mv 'build/gbf-helper/manifest (no debugger).json' build/gbf-helper/manifest.json
+          (cd build && zip -qr "../gbf-helper-$version-no-clicker.zip" gbf-helper)
+
+          rm -rf build
+          ls -l gbf-helper-*.zip
+
+      # Проверяем собранное, а не намерение: debugger не должен просочиться
+      # в лёгкую сборку, а кликер — пропасть из полной
+      - name: Verify archives
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          full="gbf-helper-$version.zip"
+          lite="gbf-helper-$version-no-clicker.zip"
+
+          unzip -l "$full" | grep -q 'gbf-helper/clicker/panel.js' || {
+            echo "::error::clicker missing from the full build"; exit 1; }
+          unzip -p "$full" gbf-helper/manifest.json | grep -q '"debugger"' || {
+            echo "::error::full build lost the debugger permission"; exit 1; }
+
+          if unzip -l "$lite" | grep -q 'gbf-helper/clicker/'; then
+            echo "::error::clicker leaked into the no-clicker build"; exit 1
+          fi
+          if unzip -p "$lite" gbf-helper/manifest.json | grep -q '"debugger"'; then
+            echo "::error::no-clicker build still asks for the debugger permission"; exit 1
+          fi
+          if unzip -l "$lite" | grep -q 'manifest (no debugger).json'; then
+            echo "::error::spare manifest left in the no-clicker build"; exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          sed "s/{{VERSION}}/$version/g" .github/release-notes.md > notes.md
+
+          # Разовые примечания к конкретному релизу живут в отдельном файле и
+          # подклеиваются к общему тексту — так временное не оседает в шаблоне
+          extra=".github/release-notes-$GITHUB_REF_NAME.md"
+          if [ -f "$extra" ]; then
+            printf '\n' >> notes.md
+            sed "s/{{VERSION}}/$version/g" "$extra" >> notes.md
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            "gbf-helper-$version.zip" "gbf-helper-$version-no-clicker.zip"

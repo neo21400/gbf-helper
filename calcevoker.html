@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GBF Helper - CalcEvoker</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 14px;
+      min-width: 480px;
+      font-size: 13px;
+    }
+
+    /* Скроллбар — как в трекере */
+    body::-webkit-scrollbar { width: 5px; }
+    body::-webkit-scrollbar-track { background: #121212; }
+    body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+    body::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0288d1;
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      background: #181818;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .toolbar select {
+      background: #222;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .toolbar select:focus { outline: none; border-color: #0288d1; }
+
+    .btn {
+      background: #222;
+      color: #aaa;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: #2c2c2c; color: #ddd; border-color: #444; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn:disabled:hover { background: #222; color: #aaa; border-color: #333; }
+
+    .btn-danger {
+      background: #222;
+      color: #777;
+      border-color: #333;
+    }
+    .btn-danger:hover {
+      background: rgba(183,28,28,0.3);
+      color: #ff8a80;
+      border-color: #c62828;
+    }
+
+    label.check {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #aaa;
+      white-space: nowrap;
+    }
+    label.check input[type=checkbox] { accent-color: #0288d1; }
+
+    /* Отключение стрелочек у number input */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield; /* Firefox */
+    }
+
+    /* Unit card */
+    .unit-card {
+      background: #181818;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .unit-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #222;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .unit-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .unit-title .arrow { font-size: 10px; color: #0288d1; }
+
+    .unit-controls {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 20px;
+      row-gap: 10px;
+      align-items: center;
+      padding: 10px 14px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #222;
+    }
+
+    .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .unit-controls label { font-size: 12px; color: #888; }
+    .unit-controls select {
+      background: #222;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 4px 7px;
+      font-size: 12px;
+    }
+    .unit-controls select:focus { outline: none; border-color: #0288d1; }
+
+    /* Step section */
+    .step-section { padding: 10px 14px; border-bottom: 1px solid #1e1e1e; }
+    .step-section:last-child { border-bottom: none; }
+
+    .step-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: #0288d1;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    /* Grid view */
+    .mat-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .mat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 5px;
+      padding: 6px;
+      width: 96px;
+      position: relative;
+      transition: border-color 0.15s;
+    }
+    .mat-item.completed { background: #1a2a1a; border-color: #2d4a2d; }
+    .mat-item:hover { border-color: #555; }
+
+    .mat-item img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      border-radius: 4px;
+      background: #121212;
+    }
+    .mat-item .img-placeholder {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px; color: #444;
+      background: #121212;
+      border-radius: 4px;
+    }
+
+    .mat-item .mat-name {
+      font-size: 9.5px;
+      color: #888;
+      text-align: center;
+      margin: 4px 0 2px;
+      line-height: 1.2;
+      height: 2.5em;
+      overflow: hidden;
+    }
+
+    .mat-item .mat-qty {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+    }
+    .mat-item .mat-qty input {
+      width: 36px;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 3px;
+      color: #ddd;
+      text-align: right;
+      padding: 2px 4px;
+      font-size: 11px;
+    }
+    .mat-item .mat-qty input:focus { outline: none; border-color: #0288d1; }
+    .mat-item .mat-qty .sep { color: #555; }
+    .mat-item .mat-qty .max { color: #0288d1; }
+
+    .check-icon {
+      position: absolute;
+      top: 4px; right: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #4caf50; opacity: 0.7;
+    }
+    .check-icon:hover { opacity: 1; }
+
+    /* List view */
+    .mat-list { display: flex; flex-direction: column; gap: 4px; }
+
+    .mat-list-item {
+      display: grid;
+      grid-template-columns: 40px 1fr 70px 70px;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e1e1e;
+      font-size: 12px;
+    }
+    .mat-list-item:last-child { border-bottom: none; }
+    .mat-list-item.completed { opacity: 0.5; }
+
+    .mat-list-item img {
+      width: 36px; height: 36px;
+      object-fit: contain;
+      border-radius: 4px;
+      background: #121212;
+    }
+    .mat-list-item .img-placeholder {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #444;
+    }
+
+    .mat-list-item .li-name { color: #aaa; }
+    .mat-list-item .li-qty {
+      display: flex; align-items: center; gap: 3px;
+    }
+    .mat-list-item .li-qty input {
+      width: 48px;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 3px;
+      color: #ddd;
+      text-align: right;
+      padding: 2px 4px;
+      font-size: 11px;
+    }
+    .mat-list-item .li-qty input:focus { outline: none; border-color: #0288d1; }
+    .mat-list-item .li-max { color: #0288d1; text-align: right; }
+
+    /* Account area (header row, right side) */
+    .account-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #sync-status { font-size: 11px; color: #666; white-space: nowrap; }
+
+    /* Account modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(18,18,18,0.85);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #181818;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 16px;
+      width: 260px;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #333;
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: #fff; }
+    .modal-body { display: flex; flex-direction: column; gap: 8px; }
+    .modal-body input {
+      background: #111;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+    .modal-body input:focus { outline: none; border-color: #0288d1; }
+    .modal-row { display: flex; gap: 6px; }
+    #modal-status { font-size: 11px; color: #0288d1; min-height: 14px; }
+
+    .empty-state {
+      text-align: center;
+      color: #444;
+      padding: 30px 0;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-row">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h1>Arcarum Summon &amp; Evoker Calculator</h1>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select id="evoker-select">
+      <option value="-1" disabled selected>--- Select an Evoker ---</option>
+    </select>
+    <button class="btn" id="btn-add" disabled>Add</button>
+
+
+    <label class="check">
+      <input type="checkbox" id="chk-split" checked> Split by step
+    </label>
+    <label class="check">
+      <input type="checkbox" id="chk-hide"> Hide completed
+    </label>
+    <label class="check" style="gap:6px;">
+      Display:
+      <select id="display-mode">
+        <option value="0">Grid</option>
+        <option value="1">List</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- Unit cards container -->
+  <div id="units-container">
+    <div class="empty-state">Select an Evoker above and click Add to begin.</div>
+  </div>
+
+  <script src="calcevoker.js"></script>
+</body>
+</html>

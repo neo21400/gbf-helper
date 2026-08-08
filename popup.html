@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="assets/vendor/fontawesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="assets/vendor/inter/inter.css">
+    <style>
+
+        body {
+            background: #121212;
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 16px;
+            width: 220px;
+        }
+
+        h1 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0288d1;
+            margin: 0 0 16px 0;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 8px;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .menu-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: #1e1e1e;
+            border: 1px solid #2a2a2a;
+            color: #ccc;
+            padding: 14px 6px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: inherit;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        /* Атрибут hidden скрывает через UA-правило [hidden]{display:none}, но
+           авторское display:flex выше него в каскаде — без этого правила кнопка
+           Auto-Clicker остаётся видимой даже без папки clicker/ */
+        .menu-tile[hidden] {
+            display: none;
+        }
+
+        .menu-tile:hover {
+            background: #282828;
+            color: #fff;
+            border-color: #444;
+        }
+
+        .menu-tile i {
+            font-size: 20px;
+            color: #888;
+            transition: color 0.15s;
+        }
+
+        .menu-tile:hover i {
+            color: #0288d1;
+        }
+
+        .sync-section {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #222;
+        }
+
+        .sync-section h2 {
+            font-size: 11px;
+            color: #888;
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sync-input {
+            width: 100%;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #ddd;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-bottom: 6px;
+            box-sizing: border-box;
+        }
+
+        .sync-input:focus {
+            outline: none;
+            border-color: #0288d1;
+        }
+
+        .sync-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .sync-btn {
+            flex: 1;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            color: #bbb;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .sync-btn:hover {
+            background: #2a2a2a;
+            color: #fff;
+            border-color: #555;
+        }
+
+        #sync-status, #update-status {
+            font-size: 10px;
+            color: #0288d1;
+            text-align: center;
+            min-height: 12px;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+    <h1>GBF Helper</h1>
+    
+    <div class="menu-grid">
+        <!-- Показывается только если папка clicker/ на месте (см. popup.js) -->
+        <button id="btn-clicker" class="menu-tile" hidden>
+            <i class="fa fa-mouse-pointer"></i>
+            <span>Auto-Clicker</span>
+        </button>
+
+        <button id="btn-loot" class="menu-tile">
+            <i class="fa fa-diamond"></i>
+            <span>Loot Tracker</span>
+        </button>
+
+        <button id="btn-calc" class="menu-tile">
+            <i class="fa fa-calculator"></i>
+            <span>Evoker Calc</span>
+        </button>
+
+        <button id="btn-gacha" class="menu-tile">
+            <i class="fa fa-ticket"></i>
+            <span>Gacha Tracker</span>
+        </button>
+    </div>
+
+    <div class="sync-section">
+        <h2>Update</h2>
+        <button id="btn-update" class="sync-btn" style="width:100%;">Check for Updates</button>
+        <div id="update-status"></div>
+    </div>
+
+    <div class="sync-section">
+        <h2>Cloud Sync</h2>
+        <input type="text" id="sync-user" class="sync-input" placeholder="Username">
+        <input type="password" id="sync-pass" class="sync-input" placeholder="Password">
+        <div class="sync-row">
+            <button id="btn-login" class="sync-btn">Login</button>
+            <button id="btn-register" class="sync-btn">Register</button>
+        </div>
+        <button id="btn-sync-now" class="sync-btn" style="width:100%;">Sync Now</button>
+        <div id="sync-status"></div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>GBF Helper — Gacha Tracker</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 14px;
+      font-size: 13px;
+    }
+    body::-webkit-scrollbar { width: 5px; }
+    body::-webkit-scrollbar-track { background: #121212; }
+    body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+    body::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0288d1;
+      margin: 0 0 12px;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── Период ─────────────────────────────────────────── */
+    .period {
+      background: #181818;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+
+    .period-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .period-title { font-size: 14px; font-weight: 600; color: #fff; }
+    .period-dates { font-size: 11px; color: #777; margin-top: 2px; }
+
+    .badge {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .badge-live { background: rgba(76,175,80,0.15); color: #6abf6e; border: 1px solid #2d4a2d; }
+    .badge-past { background: #1e1e1e; color: #666; border: 1px solid #2a2a2a; }
+
+    /* ── Прогресс к спарку ──────────────────────────────── */
+    .progress { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar {
+      flex: 1;
+      height: 8px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .fill { height: 100%; background: #0288d1; transition: width 0.2s; }
+    .fill.full { background: #4caf50; }
+    .progress-num { font-size: 12px; color: #0288d1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+    /* ── Сводка ─────────────────────────────────────────── */
+    .summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .chip {
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      color: #bbb;
+    }
+    .chip.dim { color: #777; }
+
+    .gap {
+      background: rgba(201,168,76,0.08);
+      border: 1px solid #4a4327;
+      border-radius: 4px;
+      padding: 7px 9px;
+      font-size: 11.5px;
+      color: #c9a84c;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .nothing { color: #555; font-style: italic; padding: 4px 0; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #0288d1;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin: 10px 0 6px;
+    }
+    .section-label.dim { color: #555; }
+
+    /* ── Персонажи ──────────────────────────────────────── */
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .char {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .char img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #111;
+    }
+    .char-noimg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 64px;
+      color: #666;
+      font-size: 11px;
+      text-align: center;
+      padding: 0 8px;
+      background: #111;
+    }
+    .char-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 8px;
+    }
+    .char-name { color: #ffd54f; font-weight: 600; font-size: 12.5px; }
+    .char-sub { color: #666; font-size: 10.5px; }
+    .char .tag-new { align-self: flex-start; margin-top: 2px; }
+
+    .tag-new {
+      background: rgba(2,136,209,0.2);
+      color: #4fc3f7;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    .minor { color: #666; font-size: 11.5px; margin-top: 8px; }
+
+    /* ── Спарк ──────────────────────────────────────────── */
+    .spark {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #222;
+    }
+    .spark label { color: #888; font-size: 12px; white-space: nowrap; }
+    .spark input {
+      flex: 1;
+      min-width: 0;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #ddd;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .spark input:focus { outline: none; border-color: #0288d1; }
+
+    .empty { text-align: center; color: #444; padding: 34px 0; line-height: 1.6; }
+
+    /* ── Отладка ────────────────────────────────────────── */
+    .debug { margin-top: 18px; border-top: 1px solid #222; padding-top: 10px; }
+    .debug-toggle {
+      background: none;
+      border: none;
+      color: #555;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 0;
+    }
+    .debug-toggle:hover { color: #888; }
+    .debug-body { margin-top: 10px; }
+    .debug-body .hint { color: #666; font-size: 11.5px; line-height: 1.5; margin: 0 0 10px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    label.check { display: flex; align-items: center; gap: 7px; cursor: pointer; color: #aaa; font-size: 12px; }
+    label.check input { accent-color: #0288d1; width: 15px; height: 15px; }
+    .btn {
+      background: #222;
+      color: #aaa;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { background: #2c2c2c; color: #ddd; border-color: #444; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    #stats { font-size: 11px; color: #666; margin-left: auto; }
+  </style>
+</head>
+<body>
+  <h1>Gacha Tracker</h1>
+
+  <div id="periods"></div>
+
+  <div class="debug">
+    <button class="debug-toggle" id="debug-toggle">Debug ▸</button>
+    <div class="debug-body" id="debug-body" hidden>
+      <p class="hint">
+        Draws are recorded automatically — this log is only for troubleshooting.
+        It stores raw game responses under <code>/gacha/</code>, which include your
+        account ID, so review the file before sharing it.
+      </p>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="chk-capture"> Record raw log</label>
+        <button class="btn" id="btn-export" disabled>⬇ Export</button>
+        <button class="btn" id="btn-clear" disabled>🗑 Clear</button>
+        <span id="stats">0 entries</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="gacha.js"></script>
+</body>
+</html>

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="assets/vendor/fontawesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="assets/vendor/inter/inter.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #121212;
+            color: #e0e0e0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Sidebar ── */
+        #sidebar {
+            width: 145px;
+            min-width: 145px;
+            background: #1a1a1a;
+            border-right: 1px solid #2a2a2a;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #sidebar::-webkit-scrollbar { width: 4px; }
+        #sidebar::-webkit-scrollbar-track { background: #1a1a1a; }
+        #sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        .sidebar-header {
+            padding: 10px 10px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #0288d1;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            border-bottom: 1px solid #222;
+        }
+
+        /* Category toggle */
+        .cat-btn {
+            width: 100%;
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 7px 10px;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .cat-btn:hover { background: #222; color: #ddd; }
+        .cat-btn .arrow {
+            font-size: 9px;
+            transition: transform 0.2s;
+            color: #555;
+            flex-shrink: 0;
+        }
+        .cat-btn.open .arrow { transform: rotate(90deg); color: #0288d1; }
+        .cat-btn.open { color: #ddd; }
+
+        .cat-group { border-bottom: 1px solid #1f1f1f; }
+
+        /* Sub-items container */
+        .cat-children {
+            display: none;
+            background: #161616;
+        }
+        .cat-children.visible { display: block; }
+
+        /* Raid buttons */
+        .raid-btn {
+            width: 100%;
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 6px 10px 6px 22px;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            border-left: 2px solid transparent;
+        }
+        .raid-btn:hover { background: #1e1e1e; color: #ddd; }
+        .raid-btn.active {
+            background: rgba(2,136,209,0.12);
+            color: #b3e5fc;
+            border-left-color: #0288d1;
+        }
+
+        /* Nested sub-category */
+        .sub-cat-btn {
+            width: 100%;
+            background: none;
+            border: none;
+            color: #777;
+            font-size: 10px;
+            font-family: inherit;
+            padding: 5px 10px 5px 16px;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: color 0.15s;
+        }
+        .sub-cat-btn:hover { color: #bbb; }
+        .sub-cat-btn .arrow { font-size: 8px; transition: transform 0.2s; color: #444; }
+        .sub-cat-btn.open .arrow { transform: rotate(90deg); }
+
+        .sub-cat-children { display: none; }
+        .sub-cat-children.visible { display: block; }
+        .sub-cat-children .raid-btn { padding-left: 30px; }
+
+        /* ── Main content ── */
+        #main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #raid-header {
+            padding: 10px 14px 8px;
+            border-bottom: 1px solid #222;
+            background: #181818;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        #raid-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            flex: 1;
+        }
+
+        #btn-fav {
+            background: none;
+            border: none;
+            color: #555;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: color 0.15s, background 0.15s;
+        }
+        #btn-fav:hover { color: #f39c12; background: #2a2a2a; }
+        #btn-fav.active { color: #f39c12; }
+
+        #btn-rename {
+            background: none;
+            border: none;
+            color: #555;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: color 0.15s, background 0.15s;
+        }
+        #btn-rename:hover { color: #aaa; background: #2a2a2a; }
+
+        /* Pin rows */
+        #pin-area {
+            padding: 6px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+            background: #181818;
+            border-bottom: 1px solid #1e1e1e;
+        }
+        .pin-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            min-height: 14px;
+        }
+        .pin-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #242424;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #ccc;
+            cursor: context-menu;
+        }
+        .pin-item:hover { border-color: #555; }
+        .pin-item img { width: 20px; height: 20px; border-radius: 2px; }
+
+        /* Action buttons */
+        #action-bar {
+            padding: 6px 14px;
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            border-bottom: 1px solid #1e1e1e;
+            background: #181818;
+        }
+
+        .action-btn {
+            padding: 4px 12px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #222;
+            color: #aaa;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .action-btn:hover { background: #2c2c2c; color: #ddd; border-color: #444; }
+        .action-btn.danger:hover { background: rgba(183,28,28,0.3); color: #ff8a80; border-color: #c62828; }
+
+        /* Loot content */
+        #loot-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 14px;
+        }
+        #loot-content::-webkit-scrollbar { width: 5px; }
+        #loot-content::-webkit-scrollbar-track { background: #121212; }
+        #loot-content::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+        #loot-content::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+        #no-loot-msg {
+            color: #444;
+            font-size: 13px;
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        #raid-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            align-items: start;
+        }
+
+        .kill-count {
+            grid-column: 1 / -1;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: -6px; /* Offset gap slightly for title */
+            font-weight: 500;
+        }
+        .kill-count span { color: #0288d1; font-size: 13px; }
+
+        /* Loot section */
+        .favorite-raid-card {
+            background: #181818;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .favorite-raid-header {
+            background: #222;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .favorite-raid-body {
+            padding: 10px 14px;
+        }
+
+        .loot-section {
+            /* gap handles spacing */
+        }
+
+        .loot-section-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #555;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .loot-section-title:hover { color: #888; }
+        .loot-section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #222;
+        }
+        .loot-section-title .count-badge {
+            font-size: 10px;
+            background: rgba(2,136,209,0.1);
+            color: #0288d1;
+            border-radius: 10px;
+            padding: 1px 6px;
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: 500;
+        }
+        .loot-section-title .section-collapse-arrow {
+            font-size: 9px;
+            color: #555;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .loot-section.collapsed .section-collapse-arrow { transform: rotate(-90deg); }
+        .loot-section-body {
+            display: flex;
+            flex-direction: column;
+        }
+        .loot-section.collapsed .loot-section-body { display: none; }
+
+        /* Item rows */
+        .item-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: background 0.1s;
+            cursor: default;
+        }
+        .item-row:hover { background: #1a1a1a; }
+        .item-row.has-details { cursor: pointer; }
+
+        .item-img {
+            width: 30px;
+            height: 30px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            object-fit: cover;
+        }
+
+        .item-name {
+            flex: 1;
+            color: #bbb;
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .item-count { color: #aaa; font-size: 11px; min-width: 40px; text-align: right; }
+        .item-pct {
+            font-size: 10px;
+            color: #555;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        .item-expand { color: #444; font-size: 10px; transition: transform 0.2s; margin-left: 2px; }
+        .item-row.open .item-expand { transform: rotate(90deg); }
+
+        .item-details {
+            display: none;
+            background: #161616;
+            border-left: 2px solid #2a2a2a;
+            margin: 0 6px 4px 44px;
+            padding: 4px 8px;
+            border-radius: 0 4px 4px 0;
+        }
+        .item-details.visible { display: block; }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #666;
+            padding: 1px 0;
+        }
+
+        /* Context menu */
+        #pin-item-menu {
+            display: none;
+            position: fixed;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            z-index: 9999;
+            overflow: hidden;
+            min-width: 140px;
+        }
+        .pin-menu-btn {
+            width: 100%;
+            background: none;
+            border: none;
+            color: #bbb;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 8px 14px;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .pin-menu-btn:hover { background: #2a2a2a; color: #fff; }
+    </style>
+    <title>GBF Loot Tracker</title>
+    <script src="loot.js"></script>
+</head>
+
+
+<body>
+    <div id="pin-item-menu">
+        <button class="pin-menu-btn"></button>
+        <button class="pin-menu-btn"></button>
+    </div>
+
+    <nav id="sidebar">
+        <div class="sidebar-header">⚔ Raids</div>
+
+        <!-- Favorites -->
+        <button id="btn-favorites-tab" class="cat-btn" style="color:#f39c12; font-weight: 500;">
+            <i class="fa fa-star"></i> Favorites
+        </button>
+
+        <!-- High Level -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> High Level</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305311">SUBHL</button>
+                <button class="raid-btn raid-button" data-fight-id="305491">Hexa</button>
+                <button class="raid-btn raid-button" data-fight-id="305581">Faa Zero</button>
+                <button class="raid-btn raid-button" data-fight-id="305701">Versusia</button>
+            </div>
+        </div>
+
+        <!-- Bar Raids -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Bar Raids</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="301061">PBHL</button>
+                <button class="raid-btn raid-button" data-fight-id="303251">Akasha</button>
+                <button class="raid-btn raid-button" data-fight-id="305161">GOHL</button>
+                <button class="raid-btn raid-button" data-fight-id="303141">UBAHL</button>
+            </div>
+        </div>
+
+        <!-- Odious 6 -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Odious 6</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305781">Nihuyvintae</button>
+            </div>
+        </div>
+
+        <!-- Mastery Trials -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Mastery Trials</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305661">Martial</button>
+                <button class="raid-btn raid-button" data-fight-id="305671">Esoteric</button>
+                <button class="raid-btn raid-button" data-fight-id="305681">Virtuosic</button>
+            </div>
+        </div>
+
+        <!-- Revans -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Revans</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305381">Mugen</button>
+                <button class="raid-btn raid-button" data-fight-id="305391">Diaspora</button>
+                <button class="raid-btn raid-button" data-fight-id="305401">Siegfried</button>
+                <button class="raid-btn raid-button" data-fight-id="305411">Seofon</button>
+                <button class="raid-btn raid-button" data-fight-id="305421">Cosmos</button>
+                <button class="raid-btn raid-button" data-fight-id="305431">Agastia</button>
+            </div>
+        </div>
+
+        <!-- Odious 18 -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Odious 18</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305711">Belmervolk</button>
+                <button class="raid-btn raid-button" data-fight-id="305721">Nihuyvintae</button>
+                <button class="raid-btn raid-button" data-fight-id="305731">Narophirmidas</button>
+                <button class="raid-btn raid-button" data-fight-id="305741">Macutanmacar</button>
+                <button class="raid-btn raid-button" data-fight-id="305751">Papahlukruva</button>
+                <button class="raid-btn raid-button" data-fight-id="305761">Zamalvoch</button>
+            </div>
+        </div>
+
+        <!-- M3s -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> M3s</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305601">Tiamat Aura</button>
+                <button class="raid-btn raid-button" data-fight-id="305611">Colossus Ira</button>
+                <button class="raid-btn raid-button" data-fight-id="305641">Yggdrasil Arbos</button>
+                <button class="raid-btn raid-button" data-fight-id="305631">Leviathan Mare</button>
+                <button class="raid-btn raid-button" data-fight-id="305591">Luminiera Credo</button>
+                <button class="raid-btn raid-button" data-fight-id="305621">Celeste Ater</button>
+            </div>
+        </div>
+
+        <!-- 6 Dragons -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> 6 Dragons</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305191">Wilnas</button>
+                <button class="raid-btn raid-button" data-fight-id="305201">Wamdus</button>
+                <button class="raid-btn raid-button" data-fight-id="305211">Galleon</button>
+                <button class="raid-btn raid-button" data-fight-id="305221">Ewiyar</button>
+                <button class="raid-btn raid-button" data-fight-id="305231">Lu Woh</button>
+                <button class="raid-btn raid-button" data-fight-id="305241">Fediel</button>
+            </div>
+        </div>
+
+        <!-- Ennead -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Ennead</button>
+            <div class="cat-children">
+                <button class="raid-btn raid-button" data-fight-id="305321">Atum</button>
+                <button class="raid-btn raid-button" data-fight-id="305331">Tefnut</button>
+                <button class="raid-btn raid-button" data-fight-id="305341">Bennu</button>
+                <button class="raid-btn raid-button" data-fight-id="305351">Ra</button>
+                <button class="raid-btn raid-button" data-fight-id="305361">Horus</button>
+                <button class="raid-btn raid-button" data-fight-id="305371">Osiris</button>
+            </div>
+        </div>
+
+        <!-- Impossible Raids -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Impossible Raids</button>
+            <div class="cat-children">
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="300441">Tia Impossible</button>
+                    <button class="raid-btn raid-button" data-fight-id="300491">Colo Impossible</button>
+                    <button class="raid-btn raid-button" data-fight-id="300511">Levi Impossible</button>
+                    <button class="raid-btn raid-button" data-fight-id="300531">Yggy Impossible</button>
+                    <button class="raid-btn raid-button" data-fight-id="300561">Lumi Impossible</button>
+                    <button class="raid-btn raid-button" data-fight-id="300581">Celeste Impossible</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="303151">Shiva</button>
+                    <button class="raid-btn raid-button" data-fight-id="303161">Europa</button>
+                    <button class="raid-btn raid-button" data-fight-id="303171">Alexiel</button>
+                    <button class="raid-btn raid-button" data-fight-id="303181">Grimnir</button>
+                    <button class="raid-btn raid-button" data-fight-id="303191">Metatron</button>
+                    <button class="raid-btn raid-button" data-fight-id="303221">Avatar</button>
+                    <button class="raid-btn raid-button" data-fight-id="300471">Rose Queen</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="303241">Tia Malice</button>
+                    <button class="raid-btn raid-button" data-fight-id="305151">Levi Malice</button>
+                    <button class="raid-btn raid-button" data-fight-id="305251">Phronesis</button>
+                    <button class="raid-btn raid-button" data-fight-id="305271">Lumi Malice</button>
+                    <button class="raid-btn raid-button" data-fight-id="305291">Anima-Animus</button>
+                    <button class="raid-btn raid-button" data-fight-id="305481">Legion Void</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="303231">HLQL</button>
+                    <button class="raid-btn raid-button" data-fight-id="303271">Faa</button>
+                    <button class="raid-btn raid-button" data-fight-id="303291">Four Primarchs</button>
+                    <button class="raid-btn raid-button" data-fight-id="305171">Lindwurm</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★★★+</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="303281">FaaHL</button>
+                    <button class="raid-btn raid-button" data-fight-id="305281">Belial</button>
+                    <button class="raid-btn raid-button" data-fight-id="305181">Bubz</button>
+                    <button class="raid-btn raid-button" data-fight-id="305571">The World</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Normal Raids -->
+        <div class="cat-group">
+            <button class="cat-btn raid-category-button"><span class="arrow">▶</span> Normal Raids</button>
+            <div class="cat-children">
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="300041">Tia</button>
+                    <button class="raid-btn raid-button" data-fight-id="300091">Colo</button>
+                    <button class="raid-btn raid-button" data-fight-id="300151">Levi</button>
+                    <button class="raid-btn raid-button" data-fight-id="300191">Yggy</button>
+                    <button class="raid-btn raid-button" data-fight-id="300221">Adversa</button>
+                    <button class="raid-btn raid-button" data-fight-id="300251">Celeste</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="300051">Tia Ω</button>
+                    <button class="raid-btn raid-button" data-fight-id="300101">Colo Ω</button>
+                    <button class="raid-btn raid-button" data-fight-id="300161">Levi Ω</button>
+                    <button class="raid-btn raid-button" data-fight-id="300261">Yggy Ω</button>
+                    <button class="raid-btn raid-button" data-fight-id="300271">Lumi Ω</button>
+                    <button class="raid-btn raid-button" data-fight-id="300281">Celeste Ω</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="301071">Athena</button>
+                    <button class="raid-btn raid-button" data-fight-id="300481">Grani</button>
+                    <button class="raid-btn raid-button" data-fight-id="301371">Baal</button>
+                    <button class="raid-btn raid-button" data-fight-id="301381">Garuda</button>
+                    <button class="raid-btn raid-button" data-fight-id="300461">Odin</button>
+                    <button class="raid-btn raid-button" data-fight-id="300551">Lich</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="301051">Grand Order</button>
+                    <button class="raid-btn raid-button" data-fight-id="300291">Proto Baha</button>
+                    <button class="raid-btn raid-button" data-fight-id="301671">Huanglong</button>
+                    <button class="raid-btn raid-button" data-fight-id="301681">Qilin</button>
+                </div>
+                <button class="sub-cat-btn raid-category-button"><span class="arrow">▶</span> ★★★★★/★</button>
+                <div class="sub-cat-children">
+                    <button class="raid-btn raid-button" data-fight-id="303101">Michael</button>
+                    <button class="raid-btn raid-button" data-fight-id="303091">Gabriel</button>
+                    <button class="raid-btn raid-button" data-fight-id="303111">Uriel</button>
+                    <button class="raid-btn raid-button" data-fight-id="303081">Raphael</button>
+                    <button class="raid-btn raid-button" data-fight-id="303131">UBAHA</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="main">
+        <div id="raid-header">
+            <div id="raid-title">Loading...</div>
+            <button id="btn-fav" class="fa fa-star-o" title="Favorite"></button>
+            <button id="btn-rename" class="fa fa-pencil-square-o" title="Rename"></button>
+        </div>
+        <div id="pin-area">
+            <div class="pin-row" id="top-span1"></div>
+            <div class="pin-row" id="top-span2"></div>
+        </div>
+        <div id="action-bar">
+            <button class="action-btn" id="download-button">⬇ Download</button>
+            <button class="action-btn" id="upload-button">⬆ Upload</button>
+            <input type="file" id="upload-file" style="display:none;" accept=".json">
+            <button class="action-btn danger" id="clear-button">🗑 Clear</button>
+        </div>
+        <div id="loot-content">
+            <div id="raid-info"></div>
+        </div>
+    </div>
+</body>
+
+</html>

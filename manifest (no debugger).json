@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "GBF Helper",
+  "version": "1.3",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0V/pLdVaY9tk3/BjC4uKutxZxS6BrYpXMC1ppqH7mWownL5eSVv7CJys/d8VcXFXJ4jO3LJEk6p1czbV9SVQa/+Osk9sNBJLZwMiyhl7bzdVo6nJ4OpLxymxJeHUCSWxOAY6zts4ny3+ETX21ci9XIbdjqlnuIuU07sXnPfx3cAyGtUbSvUpI9iAOZxJxwek35hzm5yAMV819yvuaOuMALuZsmNSi9FjcmjuTCyHbgdKEzqrHuurVgn+Le4MU+kufo1HiVqhiQkISk75qL8JgedWTCkehCWi9YchsJm5B8aoozfuY4S8GmyrE/ACOxAA4ittrsUfpwCzvTwMSPcmOQIDAQAB",
+  "permissions": [
+    "scripting",
+    "storage",
+    "tabs",
+    "windows",
+    "system.display",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "*://game.granbluefantasy.jp/*",
+    "*://gbf.game.mbga.jp/*",
+    "https://gbf.keka312.com/*",
+    "https://gbf.wiki/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "GBF Helper",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://game.granbluefantasy.jp/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icon.png",
+        "assets/*.mp3"
+      ],
+      "matches": [
+        "*://game.granbluefantasy.jp/*",
+        "*://gbf.game.mbga.jp/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

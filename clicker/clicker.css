@@ -1,0 +1,12 @@
+/* GBF Helper — стили для подсветки записанных элементов */
+/* Внешний файл — CSP его не блокирует в отличие от инлайн стилей */
+
+.gbf-recorded {
+  outline: 3px solid #1D9E75 !important;
+  outline-offset: 2px !important;
+}
+
+.gbf-playing {
+  outline: 3px solid #c9a84c !important;
+  outline-offset: 2px !important;
+}
