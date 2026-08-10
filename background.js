@@ -805,6 +805,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // качает и перезагружает расширение пользователь.
 const REPO_URL        = 'https://github.com/neo21400/gbf-helper/releases/latest';
 const REMOTE_MANIFEST = 'https://raw.githubusercontent.com/neo21400/gbf-helper/main/manifest.json';
+const RELEASES_API    = 'https://api.github.com/repos/neo21400/gbf-helper/releases/latest';
 
 // Сравнение по числам, а не по строкам: "1.10" новее "1.9".
 function compareVersions(a, b) {
@@ -816,6 +817,42 @@ function compareVersions(a, b) {
     if (x !== y) return x > y ? 1 : -1;
   }
   return 0;
+}
+
+// Версию спрашиваем у API релизов, а не у манифеста в main. Причин две.
+//
+// raw.githubusercontent раздаётся через CDN с max-age=300, и query-строка в ключ
+// кеша не входит: метка времени в адресе кеш не сбивала, хотя код рассчитывал на
+// обратное. Первые минуты после релиза проверка честно отвечала "обновлений нет",
+// а через пять минут та же кнопка находила версию — отсюда и жалоба, что помогает
+// перезапуск браузера (на деле помогало прошедшее время).
+//
+// И версия в main поднимается коммитом, то есть раньше публикации релиза: по
+// манифесту можно объявить версию, которой на странице релизов ещё нет.
+//
+// У API лимит 60 запросов в час на IP, так что при любой его ошибке откатываемся
+// на манифест: пусть с задержкой до пяти минут, но проверка продолжает работать.
+async function fetchLatestVersion() {
+  try {
+    const r = await fetch(RELEASES_API, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/vnd.github+json' }
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const tag = String((j && j.tag_name) || '').replace(/^v/, '');
+      if (/^\d+(\.\d+)*$/.test(tag)) return tag;
+    }
+  } catch (e) {
+    // сеть или лимит — молча уходим в запасной вариант
+  }
+
+  const r = await fetch(REMOTE_MANIFEST, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const remote = await r.json();
+  const latest = remote && remote.version;
+  if (!latest) throw new Error('в манифесте на гитхабе нет version');
+  return String(latest);
 }
 
 // Попап проверяет версию при каждом открытии, а открывают его часто — поэтому
@@ -839,13 +876,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return result(stored.latest, true);
       }
     }
-    // raw.githubusercontent отдаёт закешированный ответ несколько минут — сбиваем
-    // кеш меткой времени, иначе сразу после релиза кнопка врёт "up to date".
-    const r = await fetch(`${REMOTE_MANIFEST}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const remote = await r.json();
-    const latest = remote && remote.version;
-    if (!latest) throw new Error('в манифесте на гитхабе нет version');
+    const latest = await fetchLatestVersion();
     await chrome.storage.local.set({ [UPDATE_CACHE_KEY]: { ts: Date.now(), latest } });
     return result(latest, false);
   };
