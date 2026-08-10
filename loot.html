@@ -205,6 +205,28 @@
         }
         .pin-item:hover { border-color: #555; }
         .pin-item img { width: 20px; height: 20px; border-radius: 2px; }
+        .pin-item .pin-count { color: #ccc; }
+        /* Сколько сундуков того типа, откуда предмет падает, прошло с последнего дропа */
+        .pin-item .pin-since {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            color: #555;
+            font-size: 10px;
+        }
+        .pin-item .pin-since img { width: 11px; height: 11px; border-radius: 0; opacity: 0.7; }
+        .pin-item.pin-dry .pin-since { color: #b8860b; }
+        .pin-item.pin-empty { border-style: dashed; }
+        .pin-item.pin-empty .pin-count { color: #666; }
+        .pin-item.pin-empty img { opacity: 0.45; }
+
+        /* Пины внутри карточки рейда во вкладке Favorites */
+        .fav-pin-area {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 10px;
+        }
 
         /* Action buttons */
         #action-bar {
@@ -248,18 +270,25 @@
             margin-top: 30px;
         }
 
-        #raid-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        /* Колонки раскладываются в JS (layoutColumns), а не гридом: у грида высота
+           строки равна самой высокой секции, и под короткой секцией зияла дыра */
+        .loot-columns {
+            display: flex;
+            align-items: flex-start;
             gap: 16px;
-            align-items: start;
+        }
+        .loot-col {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
 
         .kill-count {
-            grid-column: 1 / -1;
+            margin-bottom: 10px;
             font-size: 11px;
             color: #666;
-            margin-bottom: -6px; /* Offset gap slightly for title */
             font-weight: 500;
         }
         .kill-count span { color: #0288d1; font-size: 13px; }

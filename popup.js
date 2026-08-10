@@ -27,34 +27,63 @@ document.getElementById('btn-gacha').onclick = () => {
     window.close();
 };
 
-// --- Update button ---
+// --- Version & update check ---
 const btnUpdate = document.getElementById('btn-update');
+const btnUpdateIcon = btnUpdate.querySelector('i');
 const elUpdateStatus = document.getElementById('update-status');
+const currentVersion = chrome.runtime.getManifest().version;
 
-btnUpdate.onclick = () => {
-    btnUpdate.disabled = true;
-    elUpdateStatus.textContent = 'Checking...';
-    elUpdateStatus.style.color = '#0288d1';
-    chrome.runtime.sendMessage({ type: 'CHECK_UPDATE' }, (res) => {
+document.getElementById('version-label').textContent = `Version ${currentVersion}`;
+
+let hideStatusTimer;
+function showStatus(text, kind) {
+    clearTimeout(hideStatusTimer);
+    elUpdateStatus.textContent = text;
+    elUpdateStatus.className = kind || '';
+    elUpdateStatus.hidden = false;
+}
+function hideStatus(delay = 0) {
+    clearTimeout(hideStatusTimer);
+    hideStatusTimer = setTimeout(() => { elUpdateStatus.hidden = true; }, delay);
+}
+
+// manual=false — тихая проверка при открытии попапа: спиннера нет, отчёт только
+// если обновление действительно есть, и ответ может прийти из кеша фона
+function checkUpdate(manual) {
+    if (manual) {
+        btnUpdate.disabled = true;
+        btnUpdateIcon.classList.add('fa-spin');
+        showStatus('Checking...', '');
+    }
+    chrome.runtime.sendMessage({ type: 'CHECK_UPDATE', force: !!manual }, (res) => {
         btnUpdate.disabled = false;
-        if (chrome.runtime.lastError) {
-            elUpdateStatus.textContent = 'Update check failed';
-            elUpdateStatus.style.color = '#f08080';
+        btnUpdateIcon.classList.remove('fa-spin');
+
+        if (chrome.runtime.lastError || !res || !res.ok) {
+            if (!manual) return hideStatus();
+            const why = chrome.runtime.lastError ? 'no response' : (res && res.error) || 'unknown';
+            showStatus(`Check failed: ${why}`, 'failed');
             return;
         }
-        if (!res || !res.ok) {
-            elUpdateStatus.textContent = `Error: ${(res && res.error) || 'unknown'}`;
-            elUpdateStatus.style.color = '#f08080';
+        if (res.newer) {
+            showStatus(`New version ${res.latest} available`, 'available');
+            elUpdateStatus.onclick = () => {
+                chrome.tabs.create({ url: res.url });
+                window.close();
+            };
             return;
         }
-        // При newer фон уже открыл вкладку с репозиторием, и попап закрывается —
-        // текст успеет мелькнуть только если вкладка почему-то не открылась.
-        elUpdateStatus.textContent = res.newer
-            ? `v${res.latest} available — opening GitHub...`
-            : `Already up to date (v${res.current})`;
-        elUpdateStatus.style.color = '#0288d1';
+        elUpdateStatus.onclick = null;
+        if (!manual) return hideStatus();
+        // Сама по себе актуальная версия — не новость, но на явный клик надо
+        // ответить хоть чем-то, иначе кнопка выглядит сломанной
+        showStatus('Up to date', '');
+        hideStatus(2500);
     });
-};
+}
+
+btnUpdate.onclick = () => checkUpdate(true);
+checkUpdate(false);
 
 // --- Sync UI Logic ---
 const elUser = document.getElementById('sync-user');

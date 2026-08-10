@@ -30,9 +30,19 @@ Click the extension icon in the toolbar — the popup menu opens the tool you ne
 
 The Loot and Gacha trackers need the game tab open — they read the game's own responses, so keep `game.granbluefantasy.jp` running while you play.
 
+## Pinned items in the Loot Tracker
+
+Right-click any row of loot to pin it to one of the two rows above the list. Pins are kept per raid and travel with your account, so the things you actually farm a raid for stay in front of you instead of somewhere down the Blue Chests column.
+
+A pin shows the total you've got, and next to a chest icon — **how many chests of the kind that item drops from have opened since it last dropped**. `Gold Brick x1 🔵36` means thirty-six blue chests have come and gone since the last one. It's counted in chests rather than kills on purpose: a kill that dropped no blue chest says nothing about a blue-chest item. The number turns amber when the drought is twice as long as that item's usual interval, and hovering the pin spells the whole thing out — total, how many of those chests contained it, and the average interval.
+
+An item you pinned but never got is still shown, as `x0` — "none in 419 blue chests" is usually the reason for pinning it in the first place.
+
+The same pins appear in every card of the **Favorites** tab, and right-clicking loot there pins to that card's raid.
+
 ## Updating
 
-**Check for Updates** in the popup tells you whether a newer version has been released, and opens the release page if there is one.
+The popup shows the installed version at the bottom and checks for a newer one every time you open it. Nothing appears unless there is something to say: a line "New version X available" shows up under the version, and clicking it opens the release page. The icon next to the version re-checks on the spot — the automatic check answers from a cached result for a few hours, the manual one always asks GitHub.
 
 It can't install the update for you — Chrome only updates extensions that came from the Web Store. So updating stays manual: unzip the new archive over the old folder and press **Reload** on the extension card in `chrome://extensions`.
 
@@ -41,6 +51,10 @@ It can't install the update for you — Chrome only updates extensions that came
 The Evoker Calculator exists both inside the extension and as a standalone web page at **https://gbf.keka312.com**. They work against the same account and the same server-side data — but on your machine they are two independent things.
 
 Each keeps its own local copy of your progress, and you sign in to each one separately. Nothing crosses over locally: the two meet only on the server, so progress entered in one shows up in the other after a sync. The page syncs when it loads; the extension syncs once per browser session, after every change, and on demand via **Sync Now** in the popup.
+
+## Credits
+
+The Loot Tracker started from **[cajunwildcat/GBF-Loot-Extension](https://github.com/cajunwildcat/GBF-Loot-Extension)** — the way the game's battle results are read and turned into per-raid drop statistics comes from there. Everything since is rebuilt around it: the tracker lives in its own window, keeps favorites, pinned items with per-chest counters, server sync, and it ships as one part of a larger extension. Thanks to them for the original.
 
 ## License
 

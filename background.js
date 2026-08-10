@@ -795,25 +795,44 @@ function compareVersions(a, b) {
   return 0;
 }
 
+// Попап проверяет версию при каждом открытии, а открывают его часто — поэтому
+// результат кешируется. Явная проверка по кнопке идёт с force и кеш игнорирует.
+const UPDATE_CACHE_KEY = 'updateCheck';
+const UPDATE_CACHE_TTL = 6 * 60 * 60 * 1000;
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type !== 'CHECK_UPDATE') return;
 
-  const currentVersion = chrome.runtime.getManifest().version;
-  // raw.githubusercontent отдаёт закешированный ответ несколько минут — сбиваем
-  // кеш меткой времени, иначе сразу после релиза кнопка врёт "up to date".
-  fetch(`${REMOTE_MANIFEST}?t=${Date.now()}`, { cache: 'no-store' })
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .then((remote) => {
-      const latest = remote && remote.version;
-      if (!latest) throw new Error('в манифесте на гитхабе нет version');
-      const newer = compareVersions(latest, currentVersion) > 0;
-      sendResponse({ ok: true, current: currentVersion, latest, newer, url: REPO_URL });
-      if (newer) chrome.tabs.create({ url: REPO_URL });
-    })
-    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  const current = chrome.runtime.getManifest().version;
+  const result = (latest, cached) => ({
+    ok: true, current, latest, url: REPO_URL, cached: !!cached,
+    newer: compareVersions(latest, current) > 0
+  });
+
+  const check = async () => {
+    if (!msg.force) {
+      const stored = (await chrome.storage.local.get(UPDATE_CACHE_KEY))[UPDATE_CACHE_KEY];
+      if (stored && stored.latest && Date.now() - stored.ts < UPDATE_CACHE_TTL) {
+        return result(stored.latest, true);
+      }
+    }
+    // raw.githubusercontent отдаёт закешированный ответ несколько минут — сбиваем
+    // кеш меткой времени, иначе сразу после релиза кнопка врёт "up to date".
+    const r = await fetch(`${REMOTE_MANIFEST}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const remote = await r.json();
+    const latest = remote && remote.version;
+    if (!latest) throw new Error('в манифесте на гитхабе нет version');
+    await chrome.storage.local.set({ [UPDATE_CACHE_KEY]: { ts: Date.now(), latest } });
+    return result(latest, false);
+  };
+
+  // Вкладку с релизом фон больше не открывает сам: проверка теперь идёт и молча,
+  // при открытии попапа, а утаскивать пользователя на гитхаб без спроса незачем —
+  // на страницу ведёт клик по строке с новой версией
+  check()
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, current, error: String((e && e.message) || e) }));
 
   return true; // держим канал открытым для асинхронного sendResponse
 });

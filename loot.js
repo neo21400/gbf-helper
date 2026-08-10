@@ -22,6 +22,28 @@ const gbfElement = (element) => {
     }
 }
 
+// Ключи сундуков в записи боя, которые показывает трекер (90 — артефакты, у них нет id предмета).
+// Иконки есть не для всех: у дерева, серебра и фиолетового их на вики нет
+const CHEST_META = {
+    1: { label: "wood chests" },
+    2: { label: "silver chests" },
+    3: { label: "gold chests", icon: goldChestIcon },
+    4: { label: "red chests", icon: redChestIcon },
+    11: { label: "blue chests", icon: blueChestIcon },
+    13: { label: "purple chests" },
+    16: { label: "green chests", icon: greenChestIcon }
+};
+const LOOT_CHEST_KEYS = Object.keys(CHEST_META).map(Number);
+
+// Badge и Crystal не лежат на CDN игры под своим id — для них статические картинки с вики
+const itemIcon = (item) => {
+    const id = `${item.id}`;
+    if (item.name == "Badge" && id.slice(-2, -1) == "1") return "https://gbf.wiki/images/3/33/Silver_Badge_square.jpg";
+    if (item.name == "Badge" && id.slice(-2, -1) == "0") return "https://gbf.wiki/images/b/b7/Gold_Badge_square.jpg";
+    if (item.name == "Crystal") return "https://gbf.wiki/images/e/ed/Crystal.jpg";
+    return gbfItem(item.type, item.id);
+};
+
 const raidIDs = {
     /*HL*/305311: "SUBHL", 305491: "Hexa", 305581: "Faa Zero", 305701: "Versusia",
     /*BARS*/301061: "PBHL", 303251: "Akasha", 305161: "GOHL", 303141: "UBAHL", 305571: "The World",
@@ -53,6 +75,13 @@ let bottomPins = {
 };
 let collapsedSections = {};
 
+// Секции раскладываются по колонкам жадно — каждая уходит в самую короткую на этот
+// момент. Гридом не выйдет: там высота строки равна самой высокой секции в ней,
+// и под короткой секцией остаётся дыра до конца строки.
+const COLUMN_GAP = 16;
+const COLUMN_MIN_WIDTH = 280;
+const columnHosts = [];
+
 let currentRaid = {};
 let currentRaidName = '';
 let raidData;
@@ -73,7 +102,6 @@ window.onload = async (e) => {
         pinContextMenu.style.display = "none";
     }
 
-    let currentRaidItemTotals = {};
     await chrome.storage.local.get(null).then(r => {
         raidData = {};
         for(let k in r) {
@@ -83,6 +111,30 @@ window.onload = async (e) => {
         }
     });
     console.log("raids", raidData)
+
+    // Пин показывается и для предмета, который в этом рейде ни разу не выпал, — но в
+    // pinnedItems лежит только id, без имени и типа для картинки. Собираем их из всех
+    // рейдов сразу: то, что нигде не падало, показать всё равно нечем.
+    const itemCatalog = {};
+    function indexItems(data) {
+        for (const rId in data) {
+            for (const battleId in data[rId]) {
+                const session = data[rId][battleId];
+                if (!session || typeof session !== "object") continue;
+                for (const key of LOOT_CHEST_KEYS) {
+                    if (!Array.isArray(session[key])) continue;
+                    for (const item of session[key]) {
+                        const id = parseInt(item.id);
+                        if (Number.isFinite(id) && !itemCatalog[id]) {
+                            itemCatalog[id] = { id: item.id, type: item.type, name: item.name };
+                        }
+                    }
+                }
+            }
+        }
+    }
+    indexItems(raidData);
+
     let pendingRaids;
     await chrome.storage.session.get(null).then(r => pendingRaids = r);
     console.log("pending", pendingRaids);
@@ -122,6 +174,11 @@ window.onload = async (e) => {
             return;
         }
 
+        const favHost = document.createElement("div");
+        favHost.className = "loot-columns";
+        raidInfo.appendChild(favHost);
+        const favCards = [];
+
         favoriteRaids.forEach(favId => {
             const card = document.createElement("div");
             card.className = "favorite-raid-card";
@@ -146,8 +203,19 @@ window.onload = async (e) => {
                 buildRaidInfo({ ...raidData[favId], name: displayName }, body, favId, true);
             }
             card.appendChild(body);
-            raidInfo.appendChild(card);
+            favCards.push({
+                el: card,
+                // Высота карточки — по числу строк лута; точное измерение пришлось бы
+                // делать вторым проходом, а для раскладки по колонкам хватает оценки
+                height: () => 46 + card.querySelectorAll(".item-row").length * 38
+                    + (card.querySelector(".fav-pin-area") ? 34 : 0)
+            });
         });
+
+        layoutColumns(favHost, favCards);
+        // Секции внутри карточек раскладывались, когда карточка ещё не была в DOM и её
+        // ширина была неизвестна — теперь она известна
+        relayoutAll();
     };
 
     //build Solo Fight category
@@ -354,27 +422,41 @@ window.onload = async (e) => {
             pinRow2.innerHTML = "";
         }
 
-        if (Object.keys(result).length < 1) {
+        // Ключи — id боёв, они растут со временем, так что сортировка по возрастанию
+        // даёт хронологию: без неё не посчитать, сколько килов назад упал предмет
+        const battles = Object.keys(result).filter(k => /^\d+$/.test(k)).sort((a, b) => a - b);
+
+        if (battles.length < 1) {
             if (!isFav) {
                 const noLootMsg = document.createElement("div");
                 noLootMsg.id = "no-loot-msg";
                 noLootMsg.textContent = "No recorded data for this raid";
                 container.appendChild(noLootMsg);
+                renderPins({ rId, stats: {}, chestTotals: {}, totalKills: 0 }, pinRow1, pinRow2);
             }
         } else {
-            const totalKills = Object.keys(result).length;
+            const totalKills = battles.length;
+            const { stats, chestTotals } = computeItemStats(result, battles);
+            const pinCtx = { rId, stats, chestTotals, totalKills };
+
             if (!isFav) {
                 const killCount = document.createElement("div");
                 killCount.className = "kill-count";
                 killCount.innerHTML = `Kills: <span>${totalKills}</span>`;
                 container.appendChild(killCount);
+                renderPins(pinCtx, pinRow1, pinRow2);
+            } else {
+                const favPins = buildFavPinArea(pinCtx);
+                if (favPins) container.appendChild(favPins);
             }
+
             const chestData = {
                 woodChests: [], silverChests: [], goldChests: [],
                 redChests: [], blueChests: [], purpleChests: [],
                 greenChests: [], artifacts: []
             };
-            Object.values(result).forEach(session => {
+            battles.forEach(k => {
+                const session = result[k];
                 if (session[1]) chestData.woodChests.push(session[1]);
                 if (session[2]) chestData.silverChests.push(session[2]);
                 if (session[3]) chestData.goldChests.push(session[3]);
@@ -384,53 +466,73 @@ window.onload = async (e) => {
                 if (session[16]) chestData.greenChests.push(session[16]);
                 if (session[90]) chestData.artifacts.push(session[90]);
             });
-            displayLoot(chestData, container, totalKills, rId, isFav);
+            displayLoot(chestData, container, totalKills, rId);
         }
     }
 
-    function displayLoot(data, container, totalKills, rId, isFav) {
-        const itemTotals = {};
-        if (!isFav) currentRaidItemTotals = itemTotals;
-
-        if (data.blueChests && data.blueChests.length > 0) {
-            populateChests("Blue Chests", processLoot(data.blueChests, itemTotals), data.blueChests.length, container, totalKills, isFav);
-        }
-        if (data.greenChests && data.greenChests.length > 0) {
-            populateChests("Green Chests", processLoot(data.greenChests, itemTotals), data.greenChests.length, container, totalKills, isFav);
-        }
-        if (data.purpleChests && data.purpleChests.length > 0) {
-            populateChests("Purple Chests", processLoot(data.purpleChests, itemTotals), data.purpleChests.length, container, totalKills, isFav);
-        }
-        if (data.redChests && data.redChests.length > 0) {
-            populateChests("Red Chests", processLoot(data.redChests, itemTotals), data.redChests.length, container, totalKills, isFav);
-        }
-        if (data.goldChests && data.goldChests.length > 0) {
-            populateChests("Gold Chests", processLoot(data.goldChests, itemTotals), data.goldChests.length, container, totalKills, isFav);
-        }
-        if (data.silverChests && data.silverChests.length > 0) {
-            populateChests("Silver Chests", processLoot(data.silverChests, itemTotals), data.silverChests.length, container, totalKills, isFav);
-        }
-        if (data.woodChests && data.woodChests.length > 0) {
-            populateChests("Wood Chests", processLoot(data.woodChests, itemTotals), data.woodChests.length, container, totalKills, isFav);
-        }
-        if (data.artifacts && data.artifacts.length > 0) {
-            processArtifacts(data.artifacts, container, isFav);
-        }
-        
-        if (!isFav) {
-            Object.keys(itemTotals).forEach(item => {
-                const itemId = parseInt(item);
-                if (topPins[rId] && topPins[rId].includes(itemId)) {
-                    pinRow1.appendChild(createPinnedItemSpan({ type: itemTotals[itemId].type, id: item }, itemTotals[itemId].count));
-                }
-                if (bottomPins[rId] && bottomPins[rId].includes(itemId)) {
-                    pinRow2.appendChild(createPinnedItemSpan({ type: itemTotals[itemId].type, id: item }, itemTotals[itemId].count));
-                }
+    // Сводка по каждому предмету рейда. Считаем не по килам, а по сундукам: килы, в
+    // которых нужный сундук вообще не выпал, к шансу предмета отношения не имеют.
+    // Для каждого типа сундука — сколько раз предмет из него выпал и на каком по счёту
+    // сундуке это было в последний раз.
+    function computeItemStats(result, battles) {
+        const stats = {};
+        const chestTotals = {};
+        battles.forEach(k => {
+            const session = result[k];
+            if (!session || typeof session !== "object") return;
+            LOOT_CHEST_KEYS.forEach(chestKey => {
+                if (!Array.isArray(session[chestKey])) return;
+                chestTotals[chestKey] = (chestTotals[chestKey] || 0) + 1;
+                const seen = new Set();
+                session[chestKey].forEach(item => {
+                    const id = parseInt(item.id);
+                    if (!Number.isFinite(id)) return;
+                    if (!stats[id]) {
+                        stats[id] = { id: item.id, type: item.type, name: item.name, count: 0, byChest: {} };
+                    }
+                    if (!stats[id].byChest[chestKey]) stats[id].byChest[chestKey] = { count: 0, drops: 0, lastAt: 0 };
+                    const perChest = stats[id].byChest[chestKey];
+                    const n = parseInt(item.count) || 0;
+                    stats[id].count += n;
+                    perChest.count += n;
+                    // Один и тот же предмет может лежать в сундуке несколькими стопками
+                    if (!seen.has(id)) {
+                        seen.add(id);
+                        perChest.drops++;
+                    }
+                    perChest.lastAt = chestTotals[chestKey];
+                });
             });
-        }
+        });
+        return { stats, chestTotals };
     }
 
-    function processLoot(chests, itemTotals) {
+    function displayLoot(data, container, totalKills, rId) {
+        const sections = [];
+        const addChests = (title, chests) => {
+            if (chests && chests.length > 0) {
+                sections.push(populateChests(title, processLoot(chests), chests.length, totalKills, rId));
+            }
+        };
+
+        addChests("Blue Chests", data.blueChests);
+        addChests("Green Chests", data.greenChests);
+        addChests("Purple Chests", data.purpleChests);
+        addChests("Red Chests", data.redChests);
+        addChests("Gold Chests", data.goldChests);
+        addChests("Silver Chests", data.silverChests);
+        addChests("Wood Chests", data.woodChests);
+        if (data.artifacts && data.artifacts.length > 0) {
+            sections.push(processArtifacts(data.artifacts));
+        }
+
+        const host = document.createElement("div");
+        host.className = "loot-columns";
+        container.appendChild(host);
+        layoutColumns(host, sections);
+    }
+
+    function processLoot(chests) {
         const lootMap = new Map();
         chests.forEach(chest => {
             chest.forEach(item => {
@@ -440,15 +542,12 @@ window.onload = async (e) => {
                 lootMap.get(item.id).count++;
                 if (!lootMap.get(item.id).drops[item.count]) lootMap.get(item.id).drops[item.count] = 0;
                 lootMap.get(item.id).drops[item.count]++;
-
-                if (!itemTotals[parseInt(item.id)]) itemTotals[parseInt(item.id)] = { count: 0, type: item.type };
-                itemTotals[parseInt(item.id)].count += parseInt(item.count);
             });
         });
         return Array.from(lootMap.values());
     }
 
-    function processArtifacts(artifacts, container, isFav) {
+    function processArtifacts(artifacts) {
         const artis = {};
         let count = 0;
         artifacts.forEach(artifact => {
@@ -470,6 +569,7 @@ window.onload = async (e) => {
             section.classList.toggle("collapsed");
             collapsedSections["Artifacts"] = section.classList.contains("collapsed");
             chrome.storage.sync.set({ "collapsedSections": collapsedSections });
+            relayoutAll();
         };
         section.appendChild(title);
 
@@ -488,10 +588,11 @@ window.onload = async (e) => {
             body.appendChild(row);
         }
         section.appendChild(body);
-        container.appendChild(section);
+        const rows = Object.keys(artis).length;
+        return { el: section, height: () => 26 + (collapsedSections["Artifacts"] ? 0 : rows * 46) };
     }
 
-    function populateChests(title, loot, drops, container, totalKills, isFav) {
+    function populateChests(title, loot, drops, totalKills, rId) {
         const dropRate = (drops / totalKills * 100).toFixed(1);
 
         const section = document.createElement("div");
@@ -503,6 +604,7 @@ window.onload = async (e) => {
             section.classList.toggle("collapsed");
             collapsedSections[title] = section.classList.contains("collapsed");
             chrome.storage.sync.set({ "collapsedSections": collapsedSections });
+            relayoutAll();
         };
         section.appendChild(secTitle);
 
@@ -511,10 +613,7 @@ window.onload = async (e) => {
 
         loot.forEach(item => item.percentage = ((item.count / drops) * 100).toFixed(2));
         loot.sort((a, b) => b.percentage - a.percentage).forEach(item => {
-            const img = item.name == "Badge" && `${item.id}`.slice(-2, -1) == "1" ? "https://gbf.wiki/images/3/33/Silver_Badge_square.jpg" :
-                item.name == "Badge" && `${item.id}`.slice(-2, -1) == "0" ? "https://gbf.wiki/images/b/b7/Gold_Badge_square.jpg" :
-                    item.name == "Crystal" ? "https://gbf.wiki/images/e/ed/Crystal.jpg" :
-                        gbfItem(item.type, item.id);
+            const img = itemIcon(item);
             const itemCount = Object.keys(item.drops).map(i => i * item.drops[i]).reduce((acc, n) => acc + parseInt(n), 0);
             const hasDetails = Object.keys(item.drops).length > 1;
 
@@ -541,16 +640,63 @@ window.onload = async (e) => {
             } else {
                 body.appendChild(row);
             }
-            if (!isFav) {
-                row.oncontextmenu = (e) => pinItemContextMenu(e, item);
-            }
+            row.oncontextmenu = (e) => pinItemContextMenu(e, item, rId);
         });
         section.appendChild(body);
-        container.appendChild(section);
+        const rows = loot.length;
+        return { el: section, height: () => 26 + (collapsedSections[title] ? 0 : rows * 38) };
     }
 
-    function pinItemContextMenu(e, item) {
+    function layoutColumns(host, items) {
+        host._lootItems = items;
+        if (!columnHosts.includes(host)) columnHosts.push(host);
+
+        const width = host.clientWidth || (host.parentElement ? host.parentElement.clientWidth : 0);
+        const fit = Math.floor((width + COLUMN_GAP) / (COLUMN_MIN_WIDTH + COLUMN_GAP));
+        const count = Math.max(1, Math.min(items.length || 1, fit || 1));
+
+        host.innerHTML = "";
+        const cols = [];
+        const heights = [];
+        for (let i = 0; i < count; i++) {
+            const col = document.createElement("div");
+            col.className = "loot-col";
+            host.appendChild(col);
+            cols.push(col);
+            heights.push(0);
+        }
+        items.forEach(item => {
+            let shortest = 0;
+            for (let i = 1; i < count; i++) {
+                if (heights[i] < heights[shortest]) shortest = i;
+            }
+            cols[shortest].appendChild(item.el);
+            heights[shortest] += item.height() + COLUMN_GAP;
+        });
+    }
+
+    function relayoutAll() {
+        for (let i = columnHosts.length - 1; i >= 0; i--) {
+            const host = columnHosts[i];
+            if (!host.isConnected) {
+                columnHosts.splice(i, 1);
+                continue;
+            }
+            layoutColumns(host, host._lootItems);
+        }
+    }
+
+    let lastContentWidth = 0;
+    new ResizeObserver(() => {
+        const width = document.getElementById("loot-content").clientWidth;
+        if (width === lastContentWidth) return;
+        lastContentWidth = width;
+        relayoutAll();
+    }).observe(document.getElementById("loot-content"));
+
+    function pinItemContextMenu(e, item, rId) {
         e.preventDefault();
+        e.stopPropagation();
         const itemId = parseInt(item.id);
 
         pinContextMenu.style.display = "block";
@@ -560,47 +706,109 @@ window.onload = async (e) => {
         const topPinButton = pinContextMenu.querySelector("button");
         const botPinButton = pinContextMenu.querySelector("button:nth-of-type(2)");
 
-        if (topPins[getCurrentRaid()] && topPins[getCurrentRaid()].includes(itemId)) {
-            topPinButton.innerHTML = "Unpin from row 1";
-            topPinButton.onclick = () => {
-                topPins[getCurrentRaid()] = topPins[getCurrentRaid()].filter(i => i != itemId);
-                pinRow1.querySelector(`#i-${itemId}`)?.remove();
-                chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
-            };
-        } else {
-            topPinButton.innerHTML = "Pin to row 1";
-            topPinButton.onclick = () => {
-                if (!topPins[getCurrentRaid()]) topPins[getCurrentRaid()] = [];
-                topPins[getCurrentRaid()].push(itemId);
-                pinRow1.appendChild(createPinnedItemSpan(item, currentRaidItemTotals[itemId].count));
-                chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
-            };
-        }
+        const savePins = () => {
+            chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
+            rerender();
+        };
+        const toggle = (pins, button, label) => {
+            if (pins[rId] && pins[rId].includes(itemId)) {
+                button.innerHTML = `Unpin from ${label}`;
+                button.onclick = () => {
+                    pins[rId] = pins[rId].filter(i => i != itemId);
+                    savePins();
+                };
+            } else {
+                button.innerHTML = `Pin to ${label}`;
+                button.onclick = () => {
+                    if (!pins[rId]) pins[rId] = [];
+                    pins[rId].push(itemId);
+                    savePins();
+                };
+            }
+        };
+        toggle(topPins, topPinButton, "row 1");
+        toggle(bottomPins, botPinButton, "row 2");
+    }
 
-        if (bottomPins[getCurrentRaid()] && bottomPins[getCurrentRaid()].includes(itemId)) {
-            botPinButton.innerHTML = "Unpin from row 2";
-            botPinButton.onclick = () => {
-                bottomPins[getCurrentRaid()] = bottomPins[getCurrentRaid()].filter(i => i != itemId);
-                pinRow2.querySelector(`#i-${itemId}`)?.remove();
-                chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
-            };
+    // Перерисовать текущий экран целиком: у пинов есть счётчик «сколько килов назад»,
+    // и держать его в актуальном виде точечными вставками чипов уже не выйдет
+    function rerender() {
+        const rId = getCurrentRaid();
+        if (rId) {
+            buildRaidInfo(raidData[rId] ? { ...raidData[rId], name: currentRaidName } : {});
         } else {
-            botPinButton.innerHTML = "Pin to row 2";
-            botPinButton.onclick = () => {
-                if (!bottomPins[getCurrentRaid()]) bottomPins[getCurrentRaid()] = [];
-                bottomPins[getCurrentRaid()].push(itemId);
-                pinRow2.appendChild(createPinnedItemSpan(item, currentRaidItemTotals[itemId].count));
-                chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
-            };
+            document.getElementById("btn-favorites-tab").dispatchEvent(new Event("click"));
         }
     }
 
-    function createPinnedItemSpan(item, totalCount) {
+    function renderPins(ctx, row1, row2) {
+        [[topPins, row1], [bottomPins, row2]].forEach(([pins, row]) => {
+            row.innerHTML = "";
+            (pins[ctx.rId] || []).forEach(id => row.appendChild(createPinnedItemSpan(id, ctx)));
+            // Пустой ряд иначе занимает высоту и раздвигает шапку ни за чем
+            row.style.display = row.children.length ? "flex" : "none";
+        });
+        if (row1 === pinRow1) {
+            pinArea.style.display = (row1.children.length || row2.children.length) ? "flex" : "none";
+        }
+    }
+
+    function buildFavPinArea(ctx) {
+        if (!(topPins[ctx.rId] || []).length && !(bottomPins[ctx.rId] || []).length) return null;
+        const area = document.createElement("div");
+        area.className = "fav-pin-area";
+        const row1 = document.createElement("div");
+        row1.className = "pin-row";
+        const row2 = document.createElement("div");
+        row2.className = "pin-row";
+        area.appendChild(row1);
+        area.appendChild(row2);
+        renderPins(ctx, row1, row2);
+        return area;
+    }
+
+    // Предмет может падать из нескольких типов сундуков (Hollow Key — из синего, красного
+    // и золотого). Считаем «его» тот, откуда он выпадал чаще; при равенстве — тот, что
+    // выпадает реже: он и есть узкое место
+    function primaryChest(st, chestTotals) {
+        let key = null;
+        for (const k in st.byChest) {
+            if (key === null) { key = k; continue; }
+            const a = st.byChest[k], b = st.byChest[key];
+            if (a.drops > b.drops || (a.drops === b.drops && chestTotals[k] < chestTotals[key])) key = k;
+        }
+        return key;
+    }
+
+    function createPinnedItemSpan(itemId, ctx) {
+        const st = ctx.stats[itemId];
+        // Предмет мог ни разу не выпасть в этом рейде — тогда имя и тип берём из общего
+        // каталога, иначе пин молча исчезал бы, хотя «x0 за 419 синих сундуков» и есть
+        // тот ответ, ради которого его пинили
+        const item = st || itemCatalog[itemId] || { id: itemId, type: "item/article", name: `#${itemId}` };
+        const chestKey = st ? primaryChest(st, ctx.chestTotals) : null;
+        const chest = chestKey === null ? null : CHEST_META[chestKey];
+        const perChest = chestKey === null ? null : st.byChest[chestKey];
+        const opened = chestKey === null ? ctx.totalKills : ctx.chestTotals[chestKey];
+        const drops = perChest ? perChest.drops : 0;
+        const since = perChest ? opened - perChest.lastAt : opened;
+        const unit = chest ? chest.label : "kills";
+
         const el = document.createElement("div");
-        el.className = "pin-item";
-        el.id = `i-${item.id}`;
-        el.innerHTML = `<img src="${esc(gbfItem(item.type, item.id))}"> <span>x${esc(totalCount)}</span>`;
-        el.oncontextmenu = (e) => pinItemContextMenu(e, item);
+        el.className = "pin-item" + (drops ? "" : " pin-empty");
+        el.id = `i-${itemId}`;
+        if (drops) {
+            const perDrop = opened / drops;
+            el.title = `${item.name} — x${st.count} total · dropped from ${drops} of ${opened} ${unit}`
+                + ` (1 per ${perDrop.toFixed(1)}) · last drop ${since} ${unit} ago`;
+            // Засуха вдвое длиннее обычного интервала — стоит подсветить
+            if (since > perDrop * 2) el.classList.add("pin-dry");
+        } else {
+            el.title = `${item.name} — never dropped in ${opened} ${unit}`;
+        }
+        el.innerHTML = `<img src="${esc(itemIcon(item))}"> <span class="pin-count">x${esc(st ? st.count : 0)}</span>
+            <span class="pin-since">${chest && chest.icon ? `<img src="${esc(chest.icon)}">` : ""}${esc(since)}</span>`;
+        el.oncontextmenu = (e) => pinItemContextMenu(e, item, ctx.rId);
         return el;
     }
 
@@ -620,7 +828,8 @@ window.onload = async (e) => {
                 }
             }
         }
-        
+        indexItems(raidData);
+
         if (currentRaidId && changes[currentRaidId]) {
             buildRaidInfo({ ...raidData[currentRaidId], name: currentRaidName });
         } else if (!currentRaidId && shouldUpdateFavorites) {

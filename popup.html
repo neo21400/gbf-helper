@@ -130,13 +130,55 @@
             border-color: #555;
         }
 
-        #sync-status, #update-status {
+        #sync-status {
             font-size: 10px;
             color: #0288d1;
             text-align: center;
             min-height: 12px;
             margin-top: 6px;
         }
+
+        /* Версия и проверка обновлений — подвал, а не отдельный блок кнопок */
+        .version-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 16px;
+            padding-top: 10px;
+            border-top: 1px solid #222;
+            font-size: 10px;
+            color: #666;
+        }
+
+        #btn-update {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #555;
+            font-size: 11px;
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+        #btn-update:hover { color: #0288d1; }
+        #btn-update:disabled { cursor: default; color: #444; }
+
+        #update-status {
+            display: block;
+            margin-top: 5px;
+            font-size: 10px;
+            text-align: center;
+            color: #777;
+        }
+        /* Строка появляется только когда есть о чём сказать */
+        #update-status[hidden] { display: none; }
+        #update-status.available {
+            color: #0288d1;
+            cursor: pointer;
+        }
+        #update-status.available:hover { text-decoration: underline; }
+        #update-status.failed { color: #f08080; }
     </style>
 </head>
 <body>
@@ -166,12 +208,6 @@
     </div>
 
     <div class="sync-section">
-        <h2>Update</h2>
-        <button id="btn-update" class="sync-btn" style="width:100%;">Check for Updates</button>
-        <div id="update-status"></div>
-    </div>
-
-    <div class="sync-section">
         <h2>Cloud Sync</h2>
         <input type="text" id="sync-user" class="sync-input" placeholder="Username">
         <input type="password" id="sync-pass" class="sync-input" placeholder="Password">
@@ -182,6 +218,12 @@
         <button id="btn-sync-now" class="sync-btn" style="width:100%;">Sync Now</button>
         <div id="sync-status"></div>
     </div>
+
+    <div class="version-bar">
+        <button id="btn-update" title="Check for updates"><i class="fa fa-refresh"></i></button>
+        <span id="version-label"></span>
+    </div>
+    <div id="update-status" hidden></div>
 
     <script src="popup.js"></script>
 </body>
