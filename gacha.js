@@ -155,8 +155,13 @@ const dbgToggle = document.getElementById('debug-toggle');
 const statsEl = document.getElementById('stats');
 const btnExport = document.getElementById('btn-export');
 const btnClear = document.getElementById('btn-clear');
+const btnHistoryDownload = document.getElementById('btn-history-download');
+const btnHistoryUpload = document.getElementById('btn-history-upload');
+const historyFile = document.getElementById('history-file');
+const historyStatus = document.getElementById('history-status');
 
 let currentLog = [];
+let currentData = null;
 
 // ── Форматирование ───────────────────────────────────────────────────────────
 const pad = (v) => String(v).padStart(2, '0');
@@ -336,7 +341,9 @@ function saveSpark(key, name) {
 }
 
 function renderPeriods(data) {
+  currentData = data || null;
   const periods = Object.values((data && data.periods) || {});
+  btnHistoryDownload.disabled = periods.length === 0;
   periodsEl.innerHTML = '';
 
   if (!periods.length) {
@@ -366,6 +373,90 @@ function renderPeriods(data) {
   }
 }
 
+// ── История: скачать и загрузить ─────────────────────────────────────────────
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+function saveJson(name, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+let historyStatusTimer;
+function setHistoryStatus(text, failed) {
+  clearTimeout(historyStatusTimer);
+  historyStatus.textContent = text;
+  historyStatus.className = failed ? 'failed' : '';
+  if (text) historyStatusTimer = setTimeout(() => setHistoryStatus(''), 8000);
+}
+
+btnHistoryDownload.addEventListener('click', () => {
+  const periods = (currentData && currentData.periods) || {};
+  saveJson(`gbf-gacha-history_${today()}.json`, {
+    exportedAt: new Date().toISOString(),
+    periodCount: Object.keys(periods).length,
+    periods,
+  });
+});
+
+btnHistoryUpload.addEventListener('click', () => historyFile.click());
+
+historyFile.addEventListener('change', () => {
+  const file = historyFile.files[0];
+  // Сбрасываем сразу: иначе повторный выбор того же файла не вызовет change
+  historyFile.value = '';
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onerror = () => setHistoryStatus('Could not read the file', true);
+  reader.onload = () => {
+    let parsed;
+    try { parsed = JSON.parse(reader.result); } catch (e) {
+      return setHistoryStatus('Not a JSON file', true);
+    }
+    // Годится и наш экспорт ({ periods }), и сам трекер целиком из бэкапа
+    const raw = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed.periods || parsed) : null;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return setHistoryStatus('No gacha periods in this file', true);
+    }
+    // Без этой проверки за карту периодов сходил бы любой JSON-объект: ключи в
+    // ней произвольные, так что отличить её можно только по виду значений
+    const periods = {};
+    for (const [key, p] of Object.entries(raw)) {
+      const ok = p && typeof p === 'object' && !Array.isArray(p)
+        && (Array.isArray(p.draws) || (Number.isFinite(Number(p.startUtc)) && Number.isFinite(Number(p.endUtc))));
+      if (ok) periods[key] = p;
+    }
+    if (!Object.keys(periods).length) {
+      return setHistoryStatus('No gacha periods in this file', true);
+    }
+
+    setHistoryStatus('Importing...');
+    // Слияние делает фон: там же живёт код, которым сливаются данные с сервера,
+    // и только он знает, чей use_count и спарк свежее
+    chrome.runtime.sendMessage({ type: 'GACHA_IMPORT', data: { periods } }, (res) => {
+      if (chrome.runtime.lastError || !res || !res.ok) {
+        const why = chrome.runtime.lastError ? 'no response' : (res && res.error) || 'unknown';
+        return setHistoryStatus(`Import failed: ${why}`, true);
+      }
+      setHistoryStatus(res.added
+        ? `Imported: ${res.added} new period(s), ${res.total} total`
+        : `Imported: nothing new, ${res.total} total`);
+    });
+  };
+  reader.readAsText(file);
+});
+
 // ── Отладочный лог ───────────────────────────────────────────────────────────
 function renderLog(log) {
   currentLog = Array.isArray(log) ? log : [];
@@ -376,22 +467,12 @@ function renderLog(log) {
 }
 
 btnExport.addEventListener('click', () => {
-  const payload = {
+  saveJson(`gbf-gacha-capture_${today()}.json`, {
     exportedAt: new Date().toISOString(),
     timezoneOffsetMinutes: new Date().getTimezoneOffset(),
     entryCount: currentLog.length,
     entries: currentLog,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const d = new Date();
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `gbf-gacha-capture_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
 });
 
 btnClear.addEventListener('click', () => chrome.storage.local.set({ [LOG_KEY]: [] }));

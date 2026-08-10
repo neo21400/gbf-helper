@@ -212,10 +212,27 @@
     .btn:hover:not(:disabled) { background: #2c2c2c; color: #ddd; border-color: #444; }
     .btn:disabled { opacity: 0.4; cursor: default; }
     #stats { font-size: 11px; color: #666; margin-left: auto; }
+
+    /* ── Скачать/загрузить историю ───────────────────────── */
+    #history-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    #history-status { font-size: 11px; color: #666; }
+    #history-status.failed { color: #f08080; }
   </style>
 </head>
 <body>
   <h1>Gacha Tracker</h1>
+
+  <div id="history-bar">
+    <button class="btn" id="btn-history-download" disabled>⬇ Download</button>
+    <button class="btn" id="btn-history-upload">⬆ Upload</button>
+    <input type="file" id="history-file" accept=".json" hidden>
+    <span id="history-status"></span>
+  </div>
 
   <div id="periods"></div>
 

@@ -137,6 +137,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Импорт истории круток из файла. Слияние идёт тем же кодом, что и загрузка с
+  // сервера: у периодов есть счётчик игры и спарк со своими метками времени, и
+  // разбирать, что из этого свежее, файл не должен уметь. Заливкой на сервер
+  // займётся слушатель onChanged — он сам увидит изменившиеся периоды.
+  if (msg.type === 'GACHA_IMPORT') {
+    gachaDataQueue = gachaDataQueue.then(() => new Promise((resolve) => {
+      chrome.storage.local.get([GACHA_DATA_KEY], (res) => {
+        const before = Object.keys((res[GACHA_DATA_KEY] || {}).periods || {}).length;
+        const { data } = mergeGachaData(res[GACHA_DATA_KEY], msg.data);
+        const total = Object.keys(data.periods).length;
+        if (!total) {
+          sendResponse({ ok: false, error: 'no periods in file' });
+          return resolve();
+        }
+        chrome.storage.local.set({ [GACHA_DATA_KEY]: data }, () => {
+          sendResponse({ ok: true, total, added: total - before });
+          resolve();
+        });
+      });
+    }));
+    return true;
+  }
+
   // Панель popup спрашивает, показывать ли кнопку Auto-Clicker
   if (msg.type === 'CLICKER_AVAILABLE') {
     sendResponse({ available: CLICKER_AVAILABLE });
