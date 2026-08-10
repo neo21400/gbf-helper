@@ -20,6 +20,11 @@ Every [release](https://github.com/neo21400/gbf-helper/releases/latest) ships tw
 
 The Auto-Clicker needs the `debugger` permission — that is what lets it dispatch real mouse events — and Chrome keeps the warning on screen the whole time it is attached. If you don't need the clicker, take the `no-clicker` build and the warning never appears.
 
+> [!WARNING]
+> **The Auto-Clicker is used at your own risk.** Automating play is against Granblue Fantasy's terms of service, and accounts get suspended or permanently banned for it. Nothing the clicker does — jitter, human-like cursor movement, captcha detection — makes that any less true; it dispatches input on your behalf and that is exactly what the rules forbid. Neither the author of this extension nor anyone else can appeal a ban for you. If you would rather not have the option on your machine at all, take the `no-clicker` build.
+>
+> The Loot Tracker, Evoker Calculator and Gacha Tracker don't automate anything — they only read responses the game sends to your own browser.
+
 To install: unzip, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unpacked `gbf-helper` folder.
 
 Chrome treats the two builds as the same extension, so they share their data. You can move from one to the other — in any folder — without losing loot history, calculator progress, recorded macros or window positions.
