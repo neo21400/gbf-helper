@@ -73,7 +73,19 @@ let topPins = {
 let bottomPins = {
     /*m3*/305601: [1040516800, 1040119200, 1040713400], 305611: [1040423100, 1040317400, 1040026100], 305631: [1040119700, 1040318100, 1040916500], 305641: [1040026300, 1040619000, 1040816500], 305591: [1040516900, 1040219100, 1040916200], 305621: [1040618800, 1040916300, 1040119500],/*bars*/301061: [59, 79], 303251: [], 305161: [], 303141: [], 305571: [],/*revan*/305381: [], 305391: [], 305401: [], 305411: [], 305421: [], 305431: []
 };
+// Свёрнутые секции запоминаются отдельно для каждого рейда: во вкладке Favorites
+// на экране сразу несколько рейдов, и свернуть сундуки у одного не значит свернуть
+// их у всех остальных. Формат: { rId: { "Blue Chests": true } }, хранятся только
+// свёрнутые — развёрнутое состояние это отсутствие записи
 let collapsedSections = {};
+const isCollapsed = (rId, title) => !!(collapsedSections[rId] && collapsedSections[rId][title]);
+function setCollapsed(rId, title, value) {
+    if (!collapsedSections[rId]) collapsedSections[rId] = {};
+    if (value) collapsedSections[rId][title] = true;
+    else delete collapsedSections[rId][title];
+    if (!Object.keys(collapsedSections[rId]).length) delete collapsedSections[rId];
+    chrome.storage.sync.set({ "collapsedSections": collapsedSections });
+}
 
 // Секции раскладываются по колонкам жадно — каждая уходит в самую короткую на этот
 // момент. Гридом не выйдет: там высота строки равна самой высокой секции в ней,
@@ -147,6 +159,12 @@ window.onload = async (e) => {
     let favoriteRaids = [];
     await chrome.storage.sync.get({ "favoriteRaids": [] }).then(r => favoriteRaids = r.favoriteRaids);
     await chrome.storage.sync.get({ "collapsedSections": {} }).then(r => collapsedSections = r.collapsedSections);
+    // До 1.3.2 это был плоский список заголовков на все рейды сразу. Значения там
+    // булевы, а не объекты — по этому старые записи и отличаются; выбрасываем их,
+    // иначе они так и останутся сворачивать секции всем рейдам разом
+    for (const k in collapsedSections) {
+        if (!collapsedSections[k] || typeof collapsedSections[k] !== "object") delete collapsedSections[k];
+    }
 
     const btnFav = document.getElementById("btn-fav");
     const pinArea = document.getElementById("pin-area");
@@ -523,7 +541,7 @@ window.onload = async (e) => {
         addChests("Silver Chests", data.silverChests);
         addChests("Wood Chests", data.woodChests);
         if (data.artifacts && data.artifacts.length > 0) {
-            sections.push(processArtifacts(data.artifacts));
+            sections.push(processArtifacts(data.artifacts, rId));
         }
 
         const host = document.createElement("div");
@@ -547,7 +565,7 @@ window.onload = async (e) => {
         return Array.from(lootMap.values());
     }
 
-    function processArtifacts(artifacts) {
+    function processArtifacts(artifacts, rId) {
         const artis = {};
         let count = 0;
         artifacts.forEach(artifact => {
@@ -561,14 +579,13 @@ window.onload = async (e) => {
         });
 
         const section = document.createElement("div");
-        section.className = "loot-section" + (collapsedSections["Artifacts"] ? " collapsed" : "");
+        section.className = "loot-section" + (isCollapsed(rId, "Artifacts") ? " collapsed" : "");
         const title = document.createElement("div");
         title.className = "loot-section-title";
         title.innerHTML = `<span class="fa fa-caret-down section-collapse-arrow"></span>Artifacts <span class="count-badge">${artifacts.length}</span>`;
         title.onclick = () => {
             section.classList.toggle("collapsed");
-            collapsedSections["Artifacts"] = section.classList.contains("collapsed");
-            chrome.storage.sync.set({ "collapsedSections": collapsedSections });
+            setCollapsed(rId, "Artifacts", section.classList.contains("collapsed"));
             relayoutAll();
         };
         section.appendChild(title);
@@ -589,21 +606,20 @@ window.onload = async (e) => {
         }
         section.appendChild(body);
         const rows = Object.keys(artis).length;
-        return { el: section, height: () => 26 + (collapsedSections["Artifacts"] ? 0 : rows * 46) };
+        return { el: section, height: () => 26 + (isCollapsed(rId, "Artifacts") ? 0 : rows * 46) };
     }
 
     function populateChests(title, loot, drops, totalKills, rId) {
         const dropRate = (drops / totalKills * 100).toFixed(1);
 
         const section = document.createElement("div");
-        section.className = "loot-section" + (collapsedSections[title] ? " collapsed" : "");
+        section.className = "loot-section" + (isCollapsed(rId, title) ? " collapsed" : "");
         const secTitle = document.createElement("div");
         secTitle.className = "loot-section-title";
         secTitle.innerHTML = `<span class="fa fa-caret-down section-collapse-arrow"></span>${title} <span class="count-badge">${drops} &mdash; ${dropRate}%</span>`;
         secTitle.onclick = () => {
             section.classList.toggle("collapsed");
-            collapsedSections[title] = section.classList.contains("collapsed");
-            chrome.storage.sync.set({ "collapsedSections": collapsedSections });
+            setCollapsed(rId, title, section.classList.contains("collapsed"));
             relayoutAll();
         };
         section.appendChild(secTitle);
@@ -644,7 +660,7 @@ window.onload = async (e) => {
         });
         section.appendChild(body);
         const rows = loot.length;
-        return { el: section, height: () => 26 + (collapsedSections[title] ? 0 : rows * 38) };
+        return { el: section, height: () => 26 + (isCollapsed(rId, title) ? 0 : rows * 38) };
     }
 
     function layoutColumns(host, items) {
