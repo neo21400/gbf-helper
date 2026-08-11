@@ -26,7 +26,7 @@ function inlineInput(anchorEl, label, onSubmit) {
     box.className = 'inline-input';
     box.innerHTML = `
         <span>${label}</span>
-        <input type="text" class="ii-field" placeholder="Название..." maxlength="40">
+        <input type="text" class="ii-field" placeholder="Name..." maxlength="40">
         <button class="ii-ok">OK</button>
         <button class="ii-cancel">✕</button>
     `;
@@ -57,8 +57,8 @@ function inlineConfirm(anchorEl, message, onConfirm) {
     box.className = 'inline-confirm';
     box.innerHTML = `
         <span></span>
-        <button class="ic-yes">Да</button>
-        <button class="ic-no">Нет</button>
+        <button class="ic-yes">Yes</button>
+        <button class="ic-no">No</button>
     `;
     box.querySelector('span').textContent = message;
 
@@ -104,7 +104,7 @@ function updateVizBtn() {
     const el = document.getElementById('viz-state');
     const btn = document.getElementById('btn-viz');
     if (!el || !btn) return;
-    el.textContent = vizEnabled ? 'ВКЛ' : 'ВЫКЛ';
+    el.textContent = vizEnabled ? 'ON' : 'OFF';
     btn.style.background = vizEnabled ? '#1a3a1a' : '#1a2a1a';
     btn.style.borderColor = vizEnabled ? '#4caf50' : '#2d4a2d';
 }
@@ -119,7 +119,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 function showClickDot(x, y) {
     // Показываем координаты в статус-баре если идёт воспроизведение
     const el = document.getElementById('current-step-name');
-    if (el) el.textContent = `Клик: ${x}, ${y}`;
+    if (el) el.textContent = `Click: ${x}, ${y}`;
 }
 
 function initPanel() {
@@ -157,7 +157,7 @@ function initPanel() {
 }
 
 document.getElementById('btn-clear-steps')?.addEventListener('click', function () {
-    inlineConfirm(this, 'Очистить шаги?', () => {
+    inlineConfirm(this, 'Clear all steps?', () => {
         steps = [];
         renderSteps();
         chrome.runtime.sendMessage({ from: 'panel', type: 'UPDATE_STATE_STEPS', steps: [] });
@@ -170,7 +170,7 @@ function renderSteps() {
     const isMini = document.body.classList.contains('mini');
 
     if (steps.length === 0) {
-        stepsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #555; font-size: 12px;">Список пуст</div>';
+        stepsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #555; font-size: 12px;">No steps recorded</div>';
         return;
     }
 
@@ -194,7 +194,7 @@ function renderSteps() {
             num.style.color = '#888';
             num.textContent = `${index + 1}.`;
 
-            const actionName = step.action === 'back' ? '⏮ НАЗАД' : (step.selector ?? '');
+            const actionName = step.action === 'back' ? '⏮ BACK' : (step.selector ?? '');
             label.append(num, ' ', actionName);
 
             const del = document.createElement('button');
@@ -230,8 +230,8 @@ chrome.runtime.onMessage.addListener((msg) => {
                 currentEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
             const step = steps[msg.stepIndex];
-            if (step) currentStepText.textContent = step.action === 'back' ? 'НАЗАД' : step.selector;
-            if (!isPaused) setStatus('Играю...', 'playing');
+            if (step) currentStepText.textContent = step.action === 'back' ? 'BACK' : step.selector;
+            if (!isPaused) setStatus('Playing...', 'playing');
             break;
 
         case 'PLAY_DONE':
@@ -240,17 +240,17 @@ chrome.runtime.onMessage.addListener((msg) => {
             isPaused = false;
             if (btnPause) btnPause.style.display = 'none';
             updateUIStates();
-            setStatus('Готово!', 'idle');
+            setStatus('Done!', 'idle');
             currentStepText.textContent = '-';
             document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active-step-highlight'));
             break;
 
         case 'CAPTCHA_DETECTED':
-            setStatus('⚠ КАПЧА!', 'captcha');
+            setStatus('⚠ CAPTCHA!', 'captcha');
             break;
 
         case 'NEED_RECOVERY':
-            setStatus('⚠ Нет AP!', 'captcha');
+            setStatus('⚠ Out of AP!', 'captcha');
             break;
     }
 });
@@ -271,7 +271,7 @@ btnRecord.addEventListener('click', function () {
 
 btnPlay.addEventListener('click', () => {
     if (!isPlaying) {
-        if (!steps.length) return setStatus('Сначала запиши шаги!', 'idle');
+        if (!steps.length) return setStatus('Record some steps first', 'idle');
         isPlaying = true;
         isPaused = false;
         if (btnPause) {
@@ -297,7 +297,7 @@ if (btnPause) {
         btnPause.textContent = isPaused ? '▶' : '⏸';
         btnPause.style.background = isPaused ? '#4caf50' : '#f57c00';
         sendToBackground({ type: isPaused ? 'PAUSE_PLAY' : 'RESUME_PLAY' });
-        setStatus(isPaused ? 'Пауза' : 'Играю...', isPaused ? 'idle' : 'playing');
+        setStatus(isPaused ? 'Paused' : 'Playing...', isPaused ? 'idle' : 'playing');
     });
 }
 
@@ -332,7 +332,7 @@ patternSel.addEventListener('change', () => {
 
 document.getElementById('btn-save')?.addEventListener('click', function () {
     if (steps.length === 0) return;
-    inlineInput(this, 'Название:', (name) => {
+    inlineInput(this, 'Name:', (name) => {
         if (!name.trim()) return;
 
         const settings = {
@@ -356,7 +356,7 @@ document.getElementById('btn-save')?.addEventListener('click', function () {
 document.getElementById('btn-delete-pattern')?.addEventListener('click', function () {
     const name = patternSel.value;
     if (!name) return;
-    inlineConfirm(this, `Удалить «${name}»?`, () => {
+    inlineConfirm(this, `Delete “${name}”?`, () => {
         delete patterns[name];
         chrome.storage.local.set({ patterns }, () => {
             refreshPatternList();
@@ -370,19 +370,19 @@ document.getElementById('btn-delete-pattern')?.addEventListener('click', functio
 
 function updateUIStates() {
     // Основная кнопка
-    btnRecord.textContent = isRecording ? '⏹ Стоп' : '⏺ Запись';
+    btnRecord.textContent = isRecording ? '⏹ Stop' : '⏺ Record';
     btnRecord.classList.toggle('active-record', isRecording);
 
     // Кнопка запуска
-    btnPlay.textContent = isPlaying ? '⏹ Стоп' : '▶ Запустить';
+    btnPlay.textContent = isPlaying ? '⏹ Stop' : '▶ Start';
     btnPlay.classList.toggle('active-play', isPlaying);
 
     if (isRecording) {
-        setStatus('Запись...', 'recording');
+        setStatus('Recording...', 'recording');
     } else if (isPlaying) {
-        setStatus('Играю...', 'playing');
+        setStatus('Playing...', 'playing');
     } else {
-        setStatus('Готов', 'idle');
+        setStatus('Ready', 'idle');
     }
 }
 
@@ -418,7 +418,7 @@ function sendToBackground(msg) {
 }
 
 function refreshPatternList() {
-    patternSel.innerHTML = '<option value="">— выбрать —</option>';
+    patternSel.innerHTML = '<option value="">— select —</option>';
     Object.keys(patterns).forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -572,12 +572,12 @@ jitterMaxNum?.addEventListener('change', () => saveAllSettings());
 document.getElementById('btn-auto-reps')?.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'GET_STAMINA' }, (data) => {
         if (!data) {
-            setStatus('Открой экран квеста!', 'idle');
+            setStatus('Open a quest screen first', 'idle');
             return;
         }
         repeatInput.value = data.cycles;
         totalRepsText.textContent = data.cycles;
-        setStatus(`AP: ${data.currentAP} / цена: ${data.cost}`, 'idle');
+        setStatus(`AP: ${data.currentAP} / cost: ${data.cost}`, 'idle');
     });
 });
 

@@ -7,6 +7,7 @@ const DATA_KEY = 'gachaTracker';
 const LOG_KEY = 'gachaCaptureLog';
 const ENABLED_KEY = 'gachaCaptureEnabled';
 const WIKI_CACHE_KEY = 'gachaWikiCache';
+const VIEW_KEY = 'gachaView';
 
 // ── Оружие -> персонаж ───────────────────────────────────────────────────────
 // Игра в ответе гачи не сообщает, кого открывает выпавшее оружие: там только
@@ -159,9 +160,30 @@ const btnHistoryDownload = document.getElementById('btn-history-download');
 const btnHistoryUpload = document.getElementById('btn-history-upload');
 const historyFile = document.getElementById('history-file');
 const historyStatus = document.getElementById('history-status');
+const viewSort = document.getElementById('view-sort');
+const viewLayout = document.getElementById('view-layout');
 
 let currentLog = [];
 let currentData = null;
+
+// Категории раскладываются по колонкам жадно — каждая уходит в самую короткую на
+// этот момент. Числа держим здесь же, потому что высоту категории приходится
+// оценивать до вставки в DOM: сколько карточек встанет в ряд, зависит от ширины
+// колонки, а она — от того, сколько колонок мы решили сделать.
+const COLUMN_GAP = 16;
+const COLUMN_MIN_WIDTH = 320;
+const CARD_WIDTH = 150;
+const CARD_GAP = 8;
+// Картинка 150x86 (280x160 по ширине карточки) плюс подписи и отступы
+const CARD_HEIGHT = 150;
+const LABEL_HEIGHT = 26;
+const columnHosts = [];
+
+// Вид списка выпавшего. sort='drawn' показывает всё одной лентой в порядке
+// выпадения — так между карточками нет дыр от категорий с одним предметом;
+// sort='type' раскладывает по категориям, и тогда layout выбирает, идут они
+// друг под другом на всю ширину ('rows') или разъезжаются вбок ('columns').
+const view = { sort: 'type', layout: 'columns' };
 
 // ── Форматирование ───────────────────────────────────────────────────────────
 const pad = (v) => String(v).padStart(2, '0');
@@ -187,6 +209,9 @@ function fmtBytes(n) {
 
 // SSR в игре зовётся "SS Rare" — выделяем его и NPC-персонажей
 const isSSR = (r) => /^SS/i.test(r || '');
+
+// reward_type в ответе гачи бывает только weapon или summon
+const isSummon = (it) => /summon/i.test(it.type);
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -216,6 +241,78 @@ function buildCard(src, title, sub, isNew) {
   return c;
 }
 
+// reward_id совпадает с id ассета, так что вики для сумонов и обычного оружия
+// не нужна — картинка строится прямо из него
+function cardSrc(it) {
+  if (it.ch) return IMG.npc(it.ch.id);
+  return isSummon(it) ? IMG.summon(it.id) : IMG.weapon(it.id);
+}
+
+const cardName = (it) => (it.ch ? it.ch.name : it.name);
+
+function cardFor(it) {
+  // Стихию в подписи не дублируем — её иконка уже вшита в портрет
+  return buildCard(cardSrc(it), cardName(it), it.ch ? it.name : null, it.isNew);
+}
+
+// Категория целиком: заголовок и сетка карточек фиксированной ширины
+function buildSection(label, items, makeCard) {
+  const wrap = el('div', 'gacha-section');
+  wrap.appendChild(el('div', 'section-label', label));
+  const grid = el('div', 'char-grid');
+  for (const it of items) grid.appendChild(makeCard(it));
+  wrap.appendChild(grid);
+  return { el: wrap, count: items.length };
+}
+
+// Раскладка категорий по колонкам: на узком окне колонка одна и всё идёт вниз,
+// на широком категории разъезжаются вбок вместо пустоты справа
+function layoutSections(host, sections) {
+  host._sections = sections;
+  if (!columnHosts.includes(host)) columnHosts.push(host);
+
+  const width = host.clientWidth || (host.parentElement ? host.parentElement.clientWidth : 0);
+  const fit = Math.floor((width + COLUMN_GAP) / (COLUMN_MIN_WIDTH + COLUMN_GAP));
+  const count = Math.max(1, Math.min(sections.length || 1, fit || 1));
+  const colWidth = (width - COLUMN_GAP * (count - 1)) / count;
+  const perRow = Math.max(1, Math.floor((colWidth + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
+
+  host.innerHTML = '';
+  const cols = [];
+  const heights = [];
+  for (let i = 0; i < count; i++) {
+    const col = el('div', 'gacha-col');
+    host.appendChild(col);
+    cols.push(col);
+    heights.push(0);
+  }
+  for (const s of sections) {
+    let shortest = 0;
+    for (let i = 1; i < count; i++) {
+      if (heights[i] < heights[shortest]) shortest = i;
+    }
+    cols[shortest].appendChild(s.el);
+    heights[shortest] += LABEL_HEIGHT + Math.ceil(s.count / perRow) * (CARD_HEIGHT + CARD_GAP) + COLUMN_GAP;
+  }
+}
+
+function relayoutAll() {
+  for (let i = columnHosts.length - 1; i >= 0; i--) {
+    const host = columnHosts[i];
+    // Перерисовка периодов выбрасывает старые контейнеры из документа
+    if (!host.isConnected) { columnHosts.splice(i, 1); continue; }
+    layoutSections(host, host._sections);
+  }
+}
+
+let lastWidth = 0;
+new ResizeObserver(() => {
+  const width = periodsEl.clientWidth;
+  if (width === lastWidth) return;
+  lastWidth = width;
+  relayoutAll();
+}).observe(document.body);
+
 // ── Отрисовка периода ────────────────────────────────────────────────────────
 function buildPeriod(p) {
   const card = el('div', 'period');
@@ -228,7 +325,15 @@ function buildPeriod(p) {
 
   const now = Date.now();
   const state = now < p.startUtc ? 'upcoming' : (now > p.endUtc ? 'ended' : 'active');
-  head.appendChild(el('span', 'badge badge-' + (state === 'active' ? 'live' : 'past'), state));
+
+  const headRight = el('div', 'head-right');
+  // Показывать нечего, пока не разобрали выпавшее — включим ниже
+  const btnImg = el('button', 'btn btn-img', '🖼 Image');
+  btnImg.title = 'Save this banner as a picture';
+  btnImg.hidden = true;
+  headRight.appendChild(btnImg);
+  headRight.appendChild(el('span', 'badge badge-' + (state === 'active' ? 'live' : 'past'), state));
+  head.appendChild(headRight);
   card.appendChild(head);
 
   // Порядок в хранилище — это порядок прихода ответов, а он может сбиться
@@ -272,42 +377,49 @@ function buildPeriod(p) {
       `The game counts ${used} draws, ${recorded} recorded. The missing ${used - recorded} happened before the extension was installed or on another device — their contents are unknown.`));
   }
 
-  // Выпавшее делим на три группы: персонажи (оружие, которое их открывает),
-  // прочие SSR и всё остальное счётчиками
-  const chars = [];
-  const ssr = [];
+  // SSR собираем одной лентой в порядке выпадения — категории из неё уже
+  // выбираются фильтрами, а SR и R идут счётчиками
+  const all = [];
   let sr = 0, r = 0;
   for (const d of draws) {
     for (const it of (d.items || [])) {
+      if (!isSSR(it.rarity)) {
+        if (/^S Rare/i.test(it.rarity)) sr++; else r++;
+        continue;
+      }
       // Персонажей показываем только для SSR: SR-персонажи в трекере не нужны
-      const ch = isSSR(it.rarity) ? wikiCache[it.id] : null;
-      if (ch) { chars.push({ ...it, ts: d.ts, ch }); continue; }
-      if (isSSR(it.rarity)) ssr.push({ ...it, ts: d.ts });
-      else if (/^S Rare/i.test(it.rarity)) sr++;
-      else r++;
+      all.push({ ...it, ts: d.ts, ch: wikiCache[it.id] || null });
     }
   }
 
-  if (chars.length) {
-    card.appendChild(el('div', 'section-label', `Characters (${chars.length})`));
-    const grid = el('div', 'char-grid');
-    // Стихию в подписи не дублируем — её иконка уже вшита в портрет
-    for (const it of chars) grid.appendChild(buildCard(IMG.npc(it.ch.id), it.ch.name, it.name, it.isNew));
-    card.appendChild(grid);
+  if (all.length) {
+    btnImg.hidden = false;
+    btnImg.addEventListener('click', () => saveSparkImage(btnImg, p, all, used, target, recorded));
   }
 
-  if (ssr.length) {
-    card.appendChild(el('div', 'section-label', `Other SSR (${ssr.length})`));
-    const grid = el('div', 'char-grid');
-    for (const it of ssr) {
-      // reward_id совпадает с id ассета, так что вики для сумонов и обычного
-      // оружия не нужна — картинка строится прямо из него
-      const src = it.type === 'summon' ? IMG.summon(it.id) : IMG.weapon(it.id);
-      grid.appendChild(buildCard(src, it.name, it.type, it.isNew));
+  if (!all.length) {
+    if (recorded) card.appendChild(el('div', 'section-label dim', 'No SSR'));
+  } else if (view.sort === 'drawn') {
+    card.appendChild(buildSection(`SSR (${all.length})`, all, cardFor).el);
+  } else {
+    const chars = all.filter((it) => it.ch);
+    const summons = all.filter((it) => !it.ch && isSummon(it));
+    const others = all.filter((it) => !it.ch && !isSummon(it));
+
+    const sections = [];
+    if (chars.length) sections.push(buildSection(`Characters (${chars.length})`, chars, cardFor));
+    if (summons.length) sections.push(buildSection(`Summons (${summons.length})`, summons, cardFor));
+    if (others.length) sections.push(buildSection(`Other SSR (${others.length})`, others, cardFor));
+
+    if (view.layout === 'columns') {
+      const host = el('div', 'gacha-columns');
+      card.appendChild(host);
+      // Ширину узнаём только после вставки периода в документ, поэтому здесь
+      // раскладка предварительная — renderPeriods повторит её на месте
+      layoutSections(host, sections);
+    } else {
+      for (const s of sections) card.appendChild(s.el);
     }
-    card.appendChild(grid);
-  } else if (recorded && !chars.length) {
-    card.appendChild(el('div', 'section-label dim', 'No SSR'));
   }
 
   if (sr || r) {
@@ -315,29 +427,218 @@ function buildPeriod(p) {
   }
 
   // Спарк — только руками: обмен на потолке в ответах гачи не виден
-  const sparkWrap = el('div', 'spark');
-  sparkWrap.appendChild(el('label', null, 'Spark:'));
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = used >= target ? 'who you picked at 300' : `available at ${target}`;
-  input.value = p.spark?.name || '';
-  input.addEventListener('change', () => saveSpark(p.key, input.value.trim()));
-  sparkWrap.appendChild(input);
-  card.appendChild(sparkWrap);
+  card.appendChild(buildSparkRow(p, used, target));
 
   return card;
 }
 
-function saveSpark(key, name) {
+function buildSparkRow(p, used, target) {
+  const wrap = el('div', 'spark');
+  wrap.appendChild(el('label', null, 'Spark:'));
+
+  const field = el('div', 'spark-field');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = used >= target ? 'who you picked at 300' : `available at ${target}`;
+  input.value = p.spark?.name || '';
+  field.appendChild(input);
+  wrap.appendChild(field);
+
+  // Спарк не выпадал сам, поэтому is_new у игры на него нет — отмечается руками
+  const newLabel = el('label', 'spark-new');
+  const chkNew = document.createElement('input');
+  chkNew.type = 'checkbox';
+  chkNew.checked = !!p.spark?.isNew;
+  newLabel.append(chkNew, el('span', null, 'New'));
+  newLabel.title = 'Mark the sparked one as new — it decides which column it lands in';
+  wrap.appendChild(newLabel);
+
+  const commit = () => {
+    const name = input.value.trim();
+    saveSpark(p.key, name, suggest.resolve(name), chkNew.checked);
+  };
+  // Подсказки с вики: имя нужно ровно то же, что на странице персонажа, иначе
+  // по нему не найти id — а без id спарк не нарисовать на картинке
+  const suggest = createSuggest(input, field, commit);
+  if (p.spark?.name && p.spark.id) suggest.remember(p.spark);
+
+  input.addEventListener('change', commit);
+  chkNew.addEventListener('change', commit);
+
+  return wrap;
+}
+
+// Ищем по SSR-персонажам и сумонам: спаркают обычно их
+async function searchWiki(term) {
+  const like = sqlStr('%' + term.replace(/[%_\\]/g, '') + '%');
+  const ask = async (tables, kind) => {
+    const params = new URLSearchParams({
+      action: 'cargoquery', format: 'json', origin: '*',
+      tables, fields: '_pageName=cpage,id=cid',
+      where: `rarity='SSR' AND _pageName LIKE ${like}`,
+      limit: '12',
+    });
+    const res = await fetch(`${WIKI_API}?${params}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    return (j.cargoquery || [])
+      .map((row) => row.title || {})
+      .filter((t) => t.cpage && t.cid)
+      .map((t) => ({ name: t.cpage, id: t.cid, kind }));
+  };
+  const [chars, summons] = await Promise.all([ask('characters', 'character'), ask('summons', 'summon')]);
+  return [...chars, ...summons];
+}
+
+// Свой список подсказок вместо <datalist>: нативный рисуется браузером и в
+// тёмном окне выглядит чужеродно, а стилизовать его нечем
+function createSuggest(input, host, onPick) {
+  const box = el('div', 'suggest');
+  box.hidden = true;
+  host.appendChild(box);
+
+  // Что вики уже подсказала: по имени отсюда достаём id при сохранении
+  const found = new Map();
+  const remember = (row) => found.set(row.name.toLowerCase(), { id: row.id, kind: row.kind });
+
+  let rows = [];
+  let active = -1;
+  let timer = 0;
+
+  const close = () => { box.hidden = true; active = -1; };
+
+  const paint = () => {
+    box.innerHTML = '';
+    rows.forEach((row, i) => {
+      const item = el('div', 'suggest-item' + (i === active ? ' active' : ''));
+      item.append(el('span', 'suggest-name', row.name), el('span', 'suggest-kind', row.kind));
+      // mousedown, а не click: click приходит уже после blur, а blur закрывает
+      // список, и клик попадал бы в пустоту
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); pick(i); });
+      box.appendChild(item);
+    });
+    box.hidden = !rows.length;
+  };
+
+  const pick = (i) => {
+    if (!rows[i]) return;
+    input.value = rows[i].name;
+    close();
+    onPick();
+  };
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const term = input.value.trim();
+    if (term.length < 2) return close();
+    // Ждём паузу в наборе: иначе на каждую букву уходит запрос в чужую вики
+    timer = setTimeout(async () => {
+      let found_;
+      try { found_ = await searchWiki(term); } catch (e) {
+        // Вики недоступна — подсказок не будет, имя всё равно можно вписать
+        return console.warn('[GBF Gacha] Поиск по вики не удался:', e.message);
+      }
+      // Пока ходили в вики, поле могли дочистить
+      if (input.value.trim().length < 2) return;
+      rows = found_;
+      rows.forEach(remember);
+      active = -1;
+      paint();
+    }, 300);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (box.hidden || !rows.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
+      paint();
+      box.children[active]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      pick(active);
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  input.addEventListener('blur', close);
+
+  return { remember, resolve: (name) => found.get(name.toLowerCase()) || null };
+}
+
+function saveSpark(key, name, hit, isNew) {
   chrome.storage.local.get([DATA_KEY], (res) => {
     const data = res[DATA_KEY];
     if (!data || !data.periods || !data.periods[key]) return;
     // Очистка поля тоже пишется со временем, а не как null: иначе при
     // синхронизации значение с другого устройства «воскресило» бы стёртое имя,
     // потому что у пустого поля не было бы времени для сравнения.
-    data.periods[key].spark = { name: name.slice(0, 80), ts: Date.now() };
+    data.periods[key].spark = {
+      name: name.slice(0, 80),
+      // id есть только у имени, выбранного из подсказки: вписанное руками
+      // рисуется на картинке плашкой с текстом
+      id: hit && SAFE_ID.test(hit.id) ? hit.id : null,
+      kind: hit ? hit.kind : null,
+      isNew: !!isNew,
+      ts: Date.now(),
+    };
     chrome.storage.local.set({ [DATA_KEY]: data });
   });
+}
+
+// ── Картинка баннера ─────────────────────────────────────────────────────────
+function sparkEntry(spark) {
+  if (!spark || !spark.name) return null;
+  // Без id рисуем плашку с именем: имя, вписанное руками, на вики не нашлось
+  const src = spark.id
+    ? (spark.kind === 'summon' ? IMG.summon(spark.id) : IMG.npc(spark.id))
+    : null;
+  return { src, name: spark.name, isNew: !!spark.isNew, spark: true };
+}
+
+// Спарк не выпадал, а взят на потолке — ставим его в ту колонку, где он был бы,
+// выпади он сам; какой он там единственный помеченный, видно по обводке
+const sparkColumn = (spark) => (spark.kind === 'summon' ? 2 : (spark.isNew ? 0 : 1));
+
+async function saveSparkImage(btn, p, all, used, target, recorded) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Drawing…';
+  try {
+    const entry = (it) => ({ src: cardSrc(it), name: cardName(it), isNew: it.isNew });
+    // Сумоны идут своей колонкой целиком, новые они или нет
+    const rest = all.filter((it) => !isSummon(it));
+    const pct = recorded ? (all.length / recorded * 100).toFixed(1) : '0.0';
+
+    // showNew только у сумонов: две первые колонки сами делятся по новизне, и
+    // значок на каждой карточке лишь повторял бы их заголовок
+    const columns = [
+      { title: 'New', items: rest.filter((it) => it.isNew).map(entry) },
+      { title: 'Already owned', items: rest.filter((it) => !it.isNew).map(entry) },
+      { title: 'Summons', items: all.filter(isSummon).map(entry), showNew: true },
+    ];
+    const sp = sparkEntry(p.spark);
+    if (sp) columns[sparkColumn(p.spark)].items.push(sp);
+
+    const blob = await SPARK_IMG.render({
+      title: fmtRange(p.startUtc, p.endUtc),
+      used, target,
+      subtitle: `${all.length} SSR in ${recorded} recorded draws · ${pct}%`,
+      // Про незаписанные крутки пишем прямо на картинке: иначе процент SSR
+      // читался бы как процент за весь баннер, а он только по записанному
+      note: used > recorded
+        ? `${used - recorded} of ${used} draws weren't recorded — their contents are unknown`
+        : null,
+      columns,
+    });
+    saveBlob(`gbf-spark_${fileDate(p.startUtc)}.png`, blob);
+  } catch (e) {
+    setHistoryStatus('Could not build the image: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 function renderPeriods(data) {
@@ -354,6 +655,9 @@ function renderPeriods(data) {
 
   periods.sort((a, b) => b.startUtc - a.startUtc);
   for (const p of periods) periodsEl.appendChild(buildPeriod(p));
+  // Категории раскладывались, когда период ещё не был в документе и его ширина
+  // была неизвестна — теперь она известна
+  relayoutAll();
 
   // Спрашиваем вики только про SSR-оружие: остальное в трекере всё равно
   // показывается счётчиками, а лишние сотни id по чужой вики гонять незачем.
@@ -374,13 +678,13 @@ function renderPeriods(data) {
 }
 
 // ── История: скачать и загрузить ─────────────────────────────────────────────
-const today = () => {
-  const d = new Date();
+const fileDate = (ms) => {
+  const d = new Date(ms);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
+const today = () => fileDate(Date.now());
 
-function saveJson(name, payload) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+function saveBlob(name, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -389,6 +693,10 @@ function saveJson(name, payload) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function saveJson(name, payload) {
+  saveBlob(name, new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
 }
 
 let historyStatusTimer;
@@ -483,6 +791,25 @@ chk.addEventListener('change', () => {
   });
 });
 
+// ── Вид списка ───────────────────────────────────────────────────────────────
+function applyViewControls() {
+  viewSort.value = view.sort;
+  viewLayout.value = view.layout;
+  // В ленте по порядку выпадения категорий нет — и раскладывать нечего
+  viewLayout.hidden = view.sort !== 'type';
+}
+
+function onViewChange() {
+  view.sort = viewSort.value;
+  view.layout = viewLayout.value;
+  applyViewControls();
+  chrome.storage.local.set({ [VIEW_KEY]: { ...view } });
+  renderPeriods(currentData);
+}
+
+viewSort.addEventListener('change', onViewChange);
+viewLayout.addEventListener('change', onViewChange);
+
 dbgToggle.addEventListener('click', () => {
   const open = dbgBody.hasAttribute('hidden');
   if (open) dbgBody.removeAttribute('hidden'); else dbgBody.setAttribute('hidden', '');
@@ -491,9 +818,15 @@ dbgToggle.addEventListener('click', () => {
 
 // ── Загрузка и живое обновление ──────────────────────────────────────────────
 function load() {
-  chrome.storage.local.get([DATA_KEY, LOG_KEY, ENABLED_KEY, WIKI_CACHE_KEY, WIKI_CACHE_KEY + 'V'], (res) => {
+  chrome.storage.local.get([DATA_KEY, LOG_KEY, ENABLED_KEY, WIKI_CACHE_KEY, WIKI_CACHE_KEY + 'V', VIEW_KEY], (res) => {
     // Кэш старой версии содержит ошибочные промахи — начинаем с нуля
     wikiCache = res[WIKI_CACHE_KEY + 'V'] === WIKI_CACHE_VERSION ? (res[WIKI_CACHE_KEY] || {}) : {};
+    const saved = res[VIEW_KEY];
+    if (saved && typeof saved === 'object') {
+      if (saved.sort === 'drawn' || saved.sort === 'type') view.sort = saved.sort;
+      if (saved.layout === 'rows' || saved.layout === 'columns') view.layout = saved.layout;
+    }
+    applyViewControls();
     renderPeriods(res[DATA_KEY]);
     renderLog(res[LOG_KEY]);
     chk.checked = !!res[ENABLED_KEY];

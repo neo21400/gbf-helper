@@ -56,6 +56,9 @@ jobs:
             mkdir -p build/gbf-helper
             git archive HEAD | tar -x -C build/gbf-helper
             rm -rf build/gbf-helper/.github
+            # Скриншоты нужны только на гитхабе: внутри расширения это
+            # мегабайты картинок, которые никто никогда не откроет
+            rm -rf build/gbf-helper/docs
           }
 
           # С кликером: всё как в репозитории, запасной манифест в архиве не нужен

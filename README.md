@@ -4,8 +4,25 @@ A browser extension for Granblue Fantasy bundling several independent tools:
 
 * **Loot Tracker** — records raid drops automatically and shows them in a separate window (favorites, pinning, JSON export/import).
 * **Evoker Calculator** — tracks remaining materials for every Evoker crafting stage, with optional sync to a server.
-* **Gacha Tracker** — records pulls automatically: periods, spark counter, dropped SSRs, weapon → character resolution, JSON export/import.
+* **Gacha Tracker** — records pulls automatically: periods, spark counter, dropped SSRs, weapon → character resolution, a banner saved as a picture, JSON export/import.
 * **Auto-Clicker** *(optional)* — records and replays click macros with jitter, captcha/low-AP detection, and sound alerts.
+
+## Screenshots
+
+| Loot Tracker | Evoker Calculator |
+|---|---|
+| [![Loot Tracker](docs/screenshots/loot-tracker.png)](docs/screenshots/loot-tracker.png) | [![Evoker Calculator](docs/screenshots/evoker-calc.png)](docs/screenshots/evoker-calc.png) |
+| **Gacha Tracker** | **Popup menu** |
+| [![Gacha Tracker](docs/screenshots/gacha-tracker.png)](docs/screenshots/gacha-tracker.png) | [![Popup menu](docs/screenshots/popup.png)](docs/screenshots/popup.png) |
+
+<details>
+<summary>More screenshots</summary>
+
+**Auto-Clicker control panel**
+
+[![Auto-Clicker panel](docs/screenshots/clicker-panel.png)](docs/screenshots/clicker-panel.png)
+
+</details>
 
 ## Installation
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 
 <head>
     <meta charset="utf-8">
@@ -536,40 +536,40 @@
         <div style="flex: 0 0 45px; text-align: right;">
             <button id="btn-settings-open"
                 style="background: none; border: none; font-size: 18px; padding: 0; color: #888; cursor: pointer; line-height: 1;"
-                title="Настройки">⚙</button>
+                title="Settings">⚙</button>
         </div>
     </div>
 
     <div id="status-display">
         <div style="font-weight: bold; font-size: 13px; display: flex; align-items: center;">
-            Цикл: <span id="current-rep">0</span> / <span id="total-reps-display"> 0</span>
+            Cycle: <span id="current-rep">0</span> / <span id="total-reps-display"> 0</span>
             <div style="flex: 1;"></div>
             <div class="status-dot" id="status-dot" style="margin-right: 4px; margin-top: 0;"></div>
-            <span id="status-text" style="font-size: 11px; font-weight: normal; color: #aaa;">Готов</span>
+            <span id="status-text" style="font-size: 11px; font-weight: normal; color: #aaa;">Ready</span>
         </div>
         <div style="font-size: 11px; color: #aaa; margin-top: 3px;">
-            Шаг: <span id="current-step-name">-</span>
+            Step: <span id="current-step-name">-</span>
         </div>
     </div>
 
     <div class="row">
-        <button id="btn-record" style="flex: 1; padding: 8px; font-weight: bold; background: #b71c1c;">⏺ Запись</button>
+        <button id="btn-record" style="flex: 1; padding: 8px; font-weight: bold; background: #b71c1c;">⏺ Record</button>
     </div>
 
     <div id="steps-container">
         <div id="steps-list">
-            <div style="padding: 20px; text-align: center; color: #555; font-size: 12px;">Список пуст</div>
+            <div style="padding: 20px; text-align: center; color: #555; font-size: 12px;">No steps recorded</div>
         </div>
     </div>
 
     <div class="row" style="margin-bottom: 4px; opacity: 0.8;">
-        <button id="btn-clear-steps" style="padding: 4px; font-size: 10px;">🗑 Очистить шаги</button>
+        <button id="btn-clear-steps" style="padding: 4px; font-size: 10px;">🗑 Clear steps</button>
     </div>
 
     <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
     <div class="row">
         <select id="pattern-select">
-            <option value="">— выбрать —</option>
+            <option value="">— select —</option>
         </select>
         <button id="btn-save" style="flex: 0 0 32px; padding: 4px;">💾</button>
         <button id="btn-delete-pattern" style="flex: 0 0 32px; padding: 4px;">🗑</button>
@@ -577,19 +577,19 @@
     <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
     <div class="row" style="align-items: stretch; margin-bottom: 8px;">
         <div style="display: flex; flex-direction: column; flex: 0 0 65px; overflow: hidden;">
-            <span class="label" style="font-size: 9px; margin-bottom: 2px;">Повторов:</span>
+            <span class="label" style="font-size: 9px; margin-bottom: 2px;">Repeats:</span>
             <div style="display: flex; gap: 2px;">
                 <input type="number" id="repeat-count" value="1" min="1"
                     style="min-width: 0; box-sizing: border-box; text-align: center; flex: 1;">
-                <button id="btn-auto-reps" title="Считать по AP" style="font-size: 10px; padding: 0 5px; background: #1e3a5f; color: #b3e5fc;
+                <button id="btn-auto-reps" title="Count from AP" style="font-size: 10px; padding: 0 5px; background: #1e3a5f; color: #b3e5fc;
                    border: 1px solid #2f5d90; border-radius: 3px; cursor: pointer; flex: none;">⚡</button>
             </div>
         </div>
         <button id="btn-play" style="flex: 1; background: #0288d1; font-weight: bold; font-size: 13px;">▶
-            ЗАПУСК</button>
+            START</button>
         <button id="btn-pause"
             style="flex: 0 0 40px; background: #f57c00; font-weight: bold; font-size: 13px; display: none;"
-            title="Пауза">⏸</button>
+            title="Pause">⏸</button>
     </div>
 
     <div style="margin-top: 8px; border-top: 1px solid #333; padding-top: 8px;"></div>
@@ -598,71 +598,71 @@
     <!-- Modal -->
     <div id="settings-modal">
         <div class="modal-header">
-            <div class="modal-title">Настройки</div>
+            <div class="modal-title">Settings</div>
             <button id="btn-settings-close" class="btn-close">×</button>
         </div>
 
         <div class="settings-group">
-            <div class="settings-group-title">Звуковые уведомления</div>
+            <div class="settings-group-title">Sound alerts</div>
             <div class="settings-row">
-                <span class="settings-label">Громкость:</span>
+                <span class="settings-label">Volume:</span>
                 <input type="range" id="audio-volume" min="0" max="1" step="0.1" value="0.5">
                 <span id="volume-label" style="font-size:11px; color:#aaa; min-width:35px; text-align:right;">50%</span>
             </div>
             <div class="settings-row">
-                <span class="settings-label">Повторов: <br><span style="font-size:9px; color:#666;">(0 =
-                        выкл)</span></span>
+                <span class="settings-label">Repeats: <br><span style="font-size:9px; color:#666;">(0 =
+                        off)</span></span>
                 <div class="settings-spacer"></div>
                 <input type="number" id="audio-repeats" value="3" min="0" max="10">
             </div>
         </div>
 
         <div class="settings-group">
-            <div class="settings-group-title">Задержки (Живой ввод)</div>
+            <div class="settings-group-title">Delays (human-like input)</div>
 
             <div class="settings-row">
-                <span class="settings-label">Режим:</span>
+                <span class="settings-label">Mode:</span>
                 <div class="settings-spacer"></div>
                 <select id="delay-mode">
-                    <option value="percent">Проценты (±%)</option>
-                    <option value="capped">Проценты + Лимит</option>
-                    <option value="range">Диапазон (±мс)</option>
+                    <option value="percent">Percent (±%)</option>
+                    <option value="capped">Percent + cap</option>
+                    <option value="range">Range (±ms)</option>
                 </select>
             </div>
 
             <!-- Mode: Percent & Capped -->
             <div id="mode-params-percent" class="settings-row">
-                <span class="settings-label">Разброс (%):</span>
+                <span class="settings-label">Jitter (%):</span>
                 <input type="range" id="jitter-percent" min="0" max="100" step="1" value="15">
                 <input type="number" id="jitter-percent-num" min="0" max="100" value="15">
             </div>
 
             <!-- Mode: Capped only -->
             <div id="mode-params-capped" class="settings-row" style="display:none;">
-                <span class="settings-label">Лимит (мс):</span>
+                <span class="settings-label">Cap (ms):</span>
                 <input type="range" id="jitter-cap" min="50" max="2000" step="50" value="500">
                 <input type="number" id="jitter-cap-num" min="50" max="5000" value="500">
             </div>
 
             <!-- Mode: Range -->
             <div id="mode-params-range" class="settings-row" style="display:none;">
-                <span class="settings-label">Диапазон:</span>
+                <span class="settings-label">Range:</span>
                 <div class="range-container">
                     <input type="number" id="jitter-min" value="-150">
                     <span style="color:#555;">...</span>
                     <input type="number" id="jitter-max" value="300">
-                    <span style="font-size:10px; color:#666;">мс</span>
+                    <span style="font-size:10px; color:#666;">ms</span>
                 </div>
             </div>
 
             <div class="settings-row">
-                <span class="settings-label">Доп. (мс):</span>
+                <span class="settings-label">Extra (ms):</span>
                 <input type="range" id="jitter-flat" min="0" max="2000" step="50" value="300">
                 <input type="number" id="jitter-flat-num" min="0" max="5000" value="300">
             </div>
 
             <div class="settings-row" style="margin-top: 5px; border-top: 1px solid #222; padding-top: 8px;">
-                <span class="settings-label">Скорость:</span>
+                <span class="settings-label">Speed:</span>
                 <input type="range" id="speed-slider" min="0.5" max="5.0" step="0.1" value="1.0">
                 <input type="number" id="speed-num" min="0.5" max="10.0" step="0.1" value="1.0">
             </div>
@@ -674,7 +674,7 @@
         <div class="settings-group">
             <button id="btn-viz"
                 style="width: 100%; background:#1a2a1a; color:#4caf50; font-size:11px; padding:8px; border:1px solid #2d4a2d;">👁
-                Viz (Визуализация): <span id="viz-state">ВЫКЛ</span></button>
+                Viz (show clicks): <span id="viz-state">OFF</span></button>
         </div>
     </div>
 
