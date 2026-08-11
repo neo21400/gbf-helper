@@ -9,14 +9,14 @@ A browser extension for Granblue Fantasy bundling several independent tools:
 
 ## Screenshots
 
+<details>
+<summary>Show screenshots</summary>
+
 | Loot Tracker | Evoker Calculator |
 |---|---|
 | [![Loot Tracker](docs/screenshots/loot-tracker.png)](docs/screenshots/loot-tracker.png) | [![Evoker Calculator](docs/screenshots/evoker-calc.png)](docs/screenshots/evoker-calc.png) |
 | **Gacha Tracker** | **Popup menu** |
 | [![Gacha Tracker](docs/screenshots/gacha-tracker.png)](docs/screenshots/gacha-tracker.png) | [![Popup menu](docs/screenshots/popup.png)](docs/screenshots/popup.png) |
-
-<details>
-<summary>More screenshots</summary>
 
 **Auto-Clicker control panel**
 
