@@ -252,6 +252,118 @@
         .action-btn:hover { background: #2c2c2c; color: #ddd; border-color: #444; }
         .action-btn.danger:hover { background: rgba(183,28,28,0.3); color: #ff8a80; border-color: #c62828; }
 
+        /* Отладка — временный блок, живёт под списком лута */
+        #debug-bar {
+            flex-shrink: 0;
+            padding: 8px 14px;
+            border-top: 1px solid #1e1e1e;
+            background: #181818;
+        }
+        #debug-toggle {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #555;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        #debug-toggle:hover { color: #888; }
+        #debug-body { margin-top: 8px; }
+        .debug-hint {
+            color: #666;
+            font-size: 11px;
+            line-height: 1.5;
+            margin: 0 0 8px;
+        }
+        .debug-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .debug-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            color: #aaa;
+            font-size: 11px;
+        }
+        .debug-check input { accent-color: #0288d1; width: 14px; height: 14px; }
+        #debug-stats { color: #666; font-size: 11px; }
+
+        /* Бэкафилл лута из истории боёв */
+        #backfill-bar {
+            flex-shrink: 0;
+            padding: 8px 14px;
+            border-top: 1px solid #1e1e1e;
+            background: #181818;
+        }
+        #backfill-toggle {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #555;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        #backfill-toggle:hover { color: #888; }
+        #backfill-body { margin-top: 8px; }
+        #backfill-status { color: #666; font-size: 11px; margin-top: 6px; }
+        #backfill-progress { margin-top: 8px; }
+        #backfill-progress-track {
+            height: 4px;
+            border-radius: 2px;
+            background: #262626;
+            overflow: hidden;
+        }
+        #backfill-progress-fill {
+            height: 100%;
+            width: 0;
+            background: #0288d1;
+            border-radius: 2px;
+            transition: width 0.2s;
+        }
+        /* Пока знаменатель неизвестен (открытие экрана истории) — бегущая полоса */
+        #backfill-progress-fill.indeterminate {
+            width: 30%;
+            animation: backfill-slide 1.1s ease-in-out infinite;
+        }
+        @keyframes backfill-slide {
+            0% { margin-left: -30%; }
+            100% { margin-left: 100%; }
+        }
+        #backfill-progress-label {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 11px;
+        }
+        .backfill-group-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .backfill-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 6px 8px;
+            border: 1px solid #2a2a2a;
+            border-radius: 4px;
+            background: #1c1c1c;
+        }
+        .backfill-group-name { color: #ccc; font-size: 11px; flex: 1 1 160px; }
+        .backfill-group-count { color: #666; font-size: 11px; }
+        .backfill-group select {
+            background: #222;
+            color: #ccc;
+            border: 1px solid #333;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 3px 6px;
+        }
+
         /* Loot content */
         #loot-content {
             flex: 1;
@@ -419,6 +531,54 @@
             padding: 1px 0;
         }
 
+        /* История дропов: через сколько сундуков выпал каждый */
+        .drop-history {
+            /* Тридцать строк растянули бы колонку на весь экран — прокручиваем */
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .drop-history-head { color: #999; }
+        .gap-row span:first-child { white-space: nowrap; }
+        .gap-track {
+            flex: 0 0 45%;
+            align-self: center;
+            height: 4px;
+            margin-left: 8px;
+            background: #202020;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .gap-bar { display: block; height: 100%; background: #3d5a80; }
+        .gap-bar-dry { background: #b8860b; }
+        .gap-row.gap-dry span:first-child { color: #b8860b; }
+        .gap-more { color: #444; font-style: italic; }
+        .drop-history + .detail-sizes {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid #262626;
+        }
+
+        #drop-history-popup {
+            display: none;
+            position: fixed;
+            width: 240px;
+            max-height: 320px;
+            overflow-y: auto;
+            padding: 8px 10px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            z-index: 9999;
+        }
+        #drop-history-popup .popup-title {
+            color: #ccc;
+            font-size: 11px;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
         /* Context menu */
         #pin-item-menu {
             display: none;
@@ -446,6 +606,7 @@
         .pin-menu-btn:hover { background: #2a2a2a; color: #fff; }
     </style>
     <title>GBF Loot Tracker</title>
+    <script src="quest-names.js"></script>
     <script src="loot.js"></script>
 </head>
 
@@ -455,6 +616,9 @@
         <button class="pin-menu-btn"></button>
         <button class="pin-menu-btn"></button>
     </div>
+
+    <!-- История дропов закреплённого предмета: в самой плашке пина места нет -->
+    <div id="drop-history-popup"></div>
 
     <nav id="sidebar">
         <div class="sidebar-header">⚔ Raids</div>
@@ -686,6 +850,56 @@
         </div>
         <div id="loot-content">
             <div id="raid-info"></div>
+        </div>
+
+        <!-- Бэкафилл лута, пропущенного мимо трекера (например с мобилы), из バトル履歴 -->
+        <div id="backfill-bar">
+            <button id="backfill-toggle">Backfill from history ▸</button>
+            <div id="backfill-body" hidden>
+                <p class="debug-hint">
+                    Reads your own battle history to pull in loot the tracker missed — useful
+                    after playing on mobile. New bosses must be matched to a raid below first.
+                    <b>Scan new</b> reads until it hits battles already recorded.
+                    <b>Scan all</b> walks the whole history: slow, stoppable, resumes where
+                    it left off. <b>Fix item names</b> looks up items still shown as "#534"
+                    — the history gives no names — and also runs by itself once per browser start.
+                </p>
+                <div class="debug-row">
+                    <button class="action-btn" id="btn-backfill-scan">🔄 Scan new</button>
+                    <button class="action-btn" id="btn-backfill-scan-full">📜 Scan all history</button>
+                    <button class="action-btn" id="btn-backfill-names">🏷 Fix item names</button>
+                    <button class="action-btn danger" id="btn-backfill-stop" hidden>⏹ Stop</button>
+                    <span id="backfill-status"></span>
+                </div>
+                <div id="backfill-progress" hidden>
+                    <div id="backfill-progress-track"><div id="backfill-progress-fill"></div></div>
+                    <span id="backfill-progress-label"></span>
+                </div>
+                <div id="backfill-unresolved" class="backfill-group-list"></div>
+            </div>
+        </div>
+
+        <!-- Временный слой: сбор сырого трафика игры под разбор истории боёв.
+             В релизе спрятан: обычному пользователю он не нужен, а лог пишет всё
+             подряд. Чтобы вернуть панель, снять hidden — обработчики на месте,
+             сама запись при этом остаётся выключенной, пока её не включат. -->
+        <div id="debug-bar" hidden>
+            <button id="debug-toggle">Debug ▸</button>
+            <div id="debug-body" hidden>
+                <p class="debug-hint">
+                    While this is on, every game request is written to the log — including
+                    your account ID. Look the file over before sharing it. Open game tabs
+                    start recording at once; switching it off takes effect on their next reload.
+                </p>
+                <div class="debug-row">
+                    <label class="debug-check">
+                        <input type="checkbox" id="chk-debug-capture"> Record raw log
+                    </label>
+                    <button class="action-btn" id="btn-debug-export" disabled>⬇ Export</button>
+                    <button class="action-btn danger" id="btn-debug-clear" disabled>🗑 Clear</button>
+                    <span id="debug-stats">0 entries</span>
+                </div>
+            </div>
         </div>
     </div>
 </body>

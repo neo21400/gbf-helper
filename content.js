@@ -163,6 +163,26 @@ window.addEventListener('message', (event) => {
                 });
                 break;
             }
+            case "DEBUG_CAPTURE": {
+                // Тот же разбор, что и у GACHA_CAPTURE: сообщение пришло из мира
+                // страницы, поэтому пропускаем только ожидаемые поля.
+                const e = data.entry;
+                if (!e || typeof e !== 'object') return;
+                const str = (v, max) => typeof v === 'string' ? v.slice(0, max) : null;
+                safeSend({
+                    type: 'DEBUG_CAPTURED',
+                    entry: {
+                        ts: Number(e.ts) || Date.now(),
+                        via: str(e.via, 8),
+                        method: str(e.method, 8),
+                        url: str(e.url, 500),
+                        status: Number(e.status) || 0,
+                        request: str(e.request, 200100),
+                        response: str(e.response, 200100),
+                    },
+                });
+                break;
+            }
             case "ADD_PENDING": {
                 const raidId = String(data.raid_id ?? '');
                 const questId = String(data.quest_id ?? '');

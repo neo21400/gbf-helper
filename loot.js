@@ -35,14 +35,151 @@ const CHEST_META = {
 };
 const LOOT_CHEST_KEYS = Object.keys(CHEST_META).map(Number);
 
+// Общий на всё окно справочник предметов, собирается из всех записанных боёв
+// (см. indexItems). Записи из бэкафилла приходят без имени — в ответе игры его
+// нет ни в каком виде — поэтому имя разрешается здесь, при отрисовке, а не
+// пишется в саму запись: тогда предмет, впервые выпавший живьём сегодня,
+// подписывается и во всех давно импортированных боях.
+let itemCatalog = {};
+// Он же, но по паре «папка картинки/id»: по одному id предмет не опознать —
+// 1 это и Blue Sky Crystal (материал), и Coronation Ring (item/npcaugment).
+let itemCatalogByKey = {};
+// Справочник имён с экрана предметов игры, обновляется фоном при скане
+// (см. refreshItemNames). Нужен там, где имени взять больше неоткуда: у лута из
+// истории боёв его нет в ответе игры, а у закреплённых предметов на чистом
+// профиле нет ни одной записи, из которой его можно было бы узнать.
+let itemNames = { byKind: {}, byType: {}, byId: {} };
+// Материалы — вид 10, папка item/article. Всё, что падает в рейдах, это почти
+// всегда они, поэтому общий справочник по одному id собран под них.
+const MATERIAL_KIND = "10";
+const MATERIAL_TYPE = "item/article";
+const itemName = (item) => {
+    if (item.name) return item.name;
+    const id = `${item.id}`;
+    // Точные ключи: сначала то, что уже падало живьём (там имя от самой игры),
+    // потом справочник с экрана предметов
+    if (item.type && itemCatalogByKey[`${item.type}/${id}`]) return itemCatalogByKey[`${item.type}/${id}`].name;
+    const byKind = item.kind && itemNames.byKind[item.kind];
+    if (byKind && byKind[id]) return byKind[id];
+    const byType = item.type && itemNames.byType[item.type];
+    if (byType && byType[id]) return byType[id];
+    // Дальше идёт поиск по одному id, а он врёт для всего, что не материал:
+    // кольцо с id 1 получало бы имя материала с id 1. Лучше «#1», чем чужое имя.
+    const isMaterial = item.kind ? item.kind === MATERIAL_KIND
+        : (!item.type || item.type === MATERIAL_TYPE);
+    if (!isMaterial) return "";
+    const known = itemCatalog[parseInt(item.id)];
+    if (known && known.name) return known.name;
+    return itemNames.byId[id] || "";
+};
+// Пока имя неизвестно нигде, показываем id: пустая строка выглядела бы как баг
+const itemLabel = (item) => itemName(item) || `#${item.id}`;
+
+// Ключ предмета для всего, что группирует и считает. Одного id мало: в Akasha
+// под id 1 падают сразу три разных предмета — Blue Sky Crystal (item/article),
+// Coronation Ring (item/npcaugment) и Weapon Plus Mark (item/bonusstock). Пока
+// ключом был id, они складывались в одну строку, и получалось, что кольцо
+// «выпадает по 2 и 3 штуки».
+const itemKey = (item) => `${item.type || (item.kind ? `kind${item.kind}` : MATERIAL_TYPE)}/${item.id}`;
+// Обратно: из ключа восстанавливаем предмет, когда самой записи нет (пин на то,
+// что в этом рейде ни разу не выпало)
+const itemFromKey = (key) => {
+    const at = `${key}`.lastIndexOf("/");
+    return at < 0
+        ? { id: key, type: "" }
+        : { id: key.slice(at + 1), type: key.slice(0, at).startsWith("kind") ? "" : key.slice(0, at) };
+};
+
+// Номер сундука, в котором предмет выпал в последний раз, и промежутки между
+// всеми его дропами. Первый промежуток считается от начала записей: до него
+// могло быть сколько угодно неучтённых сундуков, поэтому он и подписан иначе.
+const lastDropAt = (perChest) => (perChest && perChest.at.length) ? perChest.at[perChest.at.length - 1] : 0;
+const dropGaps = (perChest) => {
+    const at = (perChest && perChest.at) || [];
+    return at.map((n, i) => n - (i ? at[i - 1] : 0));
+};
+
+// У ходового материала дропов тысячи, и вываливать их все — мёртвый DOM ради
+// хвоста, который никто не прокрутит. Показываем последние.
+const HISTORY_ROWS = 30;
+
+function buildDropHistory(perChest, opened, unit) {
+    const el = document.createElement("div");
+    el.className = "drop-history";
+    const gaps = dropGaps(perChest);
+    if (!gaps.length) {
+        el.innerHTML = `<div class="detail-row"><span>never dropped in ${esc(opened)} ${esc(unit)}</span></div>`;
+        return el;
+    }
+    const since = opened - lastDropAt(perChest);
+    const perDrop = opened / gaps.length;
+    const longest = Math.max(...gaps, since, 1);
+    const shown = gaps.slice(-HISTORY_ROWS);
+    const hidden = gaps.length - shown.length;
+    const bar = (n, dry) => `<span class="gap-track"><span class="gap-bar${dry ? " gap-bar-dry" : ""}"`
+        + ` style="width:${Math.max(2, Math.round(n / longest * 100))}%"></span></span>`;
+    const rows = shown.map((gap, i) => {
+        const n = hidden + i;
+        // У первого дропа промежуток отсчитан от начала записей, а не от
+        // прошлой находки, поэтому и подпись другая: «на таком-то сундуке»
+        const label = n === 0
+            ? `#1 &mdash; at ${esc(gap)}`
+            : `#${esc(n + 1)} &mdash; after ${esc(gap)}`;
+        return `<div class="detail-row gap-row"><span>${label}</span>${bar(gap, false)}</div>`;
+    }).join("");
+    // Засуха вдвое длиннее обычного интервала — то же правило, что подсвечивает пин
+    const dry = since > perDrop * 2;
+    el.innerHTML = `<div class="detail-row drop-history-head">
+            <span>${esc(gaps.length)} drop${gaps.length === 1 ? "" : "s"} in ${esc(opened)} ${esc(unit)}</span>
+            <span>1 per ${perDrop.toFixed(1)}</span>
+        </div>`
+        + (hidden ? `<div class="detail-row gap-more">${esc(hidden)} earlier drop${hidden === 1 ? "" : "s"} not shown</div>` : "")
+        + rows
+        + `<div class="detail-row gap-row${dry ? " gap-dry" : ""}"><span>now &mdash; ${esc(since)} since</span>${bar(since, dry)}</div>`;
+    return el;
+}
+
+// CDN раскладывает предметы по нескольким каталогам, и по одному id категорию
+// не вычислить: 20001 лежит в item/article, а 20004 — в item/evolution.
+// Поэтому берём первичную догадку, а промахи добираются перебором ниже.
+const ICON_TYPES = ["item/article", "item/evolution", "item/npcarticle", "weapon", "summon", "npc"];
+const guessItemType = (id) => {
+    const s = `${id}`;
+    // Десятизначные id: 1… оружие, 2… саммон, 3… персонаж
+    if (/^\d{10}$/.test(s)) {
+        if (s[0] === "1") return "weapon";
+        if (s[0] === "2") return "summon";
+        if (s[0] === "3") return "npc";
+    }
+    return "item/article";
+};
+
 // Badge и Crystal не лежат на CDN игры под своим id — для них статические картинки с вики
 const itemIcon = (item) => {
     const id = `${item.id}`;
-    if (item.name == "Badge" && id.slice(-2, -1) == "1") return "https://gbf.wiki/images/3/33/Silver_Badge_square.jpg";
-    if (item.name == "Badge" && id.slice(-2, -1) == "0") return "https://gbf.wiki/images/b/b7/Gold_Badge_square.jpg";
-    if (item.name == "Crystal") return "https://gbf.wiki/images/e/ed/Crystal.jpg";
-    return gbfItem(item.type, item.id);
+    const name = itemName(item);
+    if (name == "Badge" && id.slice(-2, -1) == "1") return "https://gbf.wiki/images/3/33/Silver_Badge_square.jpg";
+    if (name == "Badge" && id.slice(-2, -1) == "0") return "https://gbf.wiki/images/b/b7/Gold_Badge_square.jpg";
+    if (name == "Crystal") return "https://gbf.wiki/images/e/ed/Crystal.jpg";
+    const known = itemCatalog[parseInt(item.id)];
+    return gbfItem(item.type || (known && known.type) || guessItemType(id), item.id);
 };
+
+// Тип предмета известен не всегда: у пинов по умолчанию его негде взять, пока
+// пользователь не отыграл ни одного боя, а бэкафилл из истории имён и типов не
+// приносит. Вместо битой картинки перебираем остальные каталоги CDN. Событие
+// error не всплывает, поэтому слушаем на фазе перехвата.
+document.addEventListener("error", (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== "IMG") return;
+    const m = /\/img_mid\/sp\/assets\/(.+)\/s\/([\w.-]+)\.jpg/.exec(img.src);
+    if (!m) return; // не картинка предмета с CDN игры (вики, иконки сундуков)
+    const tried = (img.dataset.iconTried ? img.dataset.iconTried.split("|") : []).concat(m[1]);
+    const next = ICON_TYPES.find(t => !tried.includes(t));
+    if (!next) return; // варианты кончились — оставляем как есть, чтобы не зациклиться
+    img.dataset.iconTried = tried.join("|");
+    img.src = gbfItem(next, m[2]);
+}, true);
 
 const raidIDs = {
     /*HL*/305311: "SUBHL", 305491: "Hexa", 305581: "Faa Zero", 305701: "Versusia",
@@ -110,8 +247,11 @@ window.onload = async (e) => {
     chrome.runtime.sendMessage({ type: 'SYNC_DOWNLOAD' });
 
     const pinContextMenu = document.querySelector("#pin-item-menu");
+    const historyPopup = document.querySelector("#drop-history-popup");
     document.onclick = (e) => {
         pinContextMenu.style.display = "none";
+        // Клик по самому попапу не закрывает его: внутри есть что прокручивать
+        if (!historyPopup.contains(e.target)) historyPopup.style.display = "none";
     }
 
     await chrome.storage.local.get(null).then(r => {
@@ -121,13 +261,18 @@ window.onload = async (e) => {
                 raidData[k] = r[k];
             }
         }
+        const names = r["itemNames"];
+        if (names && typeof names === "object") {
+            itemNames = { byKind: names.byKind || {}, byType: names.byType || {}, byId: names.byId || {} };
+        }
     });
     console.log("raids", raidData)
 
     // Пин показывается и для предмета, который в этом рейде ни разу не выпал, — но в
     // pinnedItems лежит только id, без имени и типа для картинки. Собираем их из всех
     // рейдов сразу: то, что нигде не падало, показать всё равно нечем.
-    const itemCatalog = {};
+    // Заполняем общий itemCatalog (объявлен выше) — из него же itemName и itemIcon
+    // подставляют имя и тип записям бэкафилла, у которых их нет.
     function indexItems(data) {
         for (const rId in data) {
             for (const battleId in data[rId]) {
@@ -137,9 +282,15 @@ window.onload = async (e) => {
                     if (!Array.isArray(session[key])) continue;
                     for (const item of session[key]) {
                         const id = parseInt(item.id);
-                        if (Number.isFinite(id) && !itemCatalog[id]) {
+                        if (!Number.isFinite(id)) continue;
+                        // Записи из бэкафилла приходят без имени — не даём такой
+                        // перекрыть уже известное имя из живого перехвата
+                        if (!itemCatalog[id] || (!itemCatalog[id].name && item.name)) {
                             itemCatalog[id] = { id: item.id, type: item.type, name: item.name };
                         }
+                        if (!item.name || !item.type) continue;
+                        const key = `${item.type}/${item.id}`;
+                        if (!itemCatalogByKey[key]) itemCatalogByKey[key] = { id: item.id, type: item.type, name: item.name };
                     }
                 }
             }
@@ -154,6 +305,28 @@ window.onload = async (e) => {
     await chrome.storage.sync.get({ "pinnedItems": pinnedItems }).then(r => pinnedItems = r.pinnedItems);
     topPins = pinnedItems.top;
     bottomPins = pinnedItems.bot;
+    // До этой версии пин хранился одним id, потому что предмет считался за id.
+    // Под id 1 ходят и Blue Sky Crystal, и Coronation Ring, и Weapon Plus Mark,
+    // поэтому теперь ключ — «папка картинки/id». Старые пины переводим один раз,
+    // тип берём из уже записанного лута: то, что пинили, наверняка уже падало.
+    // Для неоднозначного id может выпасть не тот предмет — тогда перепинить.
+    if (migratePins(topPins) | migratePins(bottomPins)) {
+        chrome.storage.sync.set({ "pinnedItems": { top: topPins, bot: bottomPins } });
+    }
+
+    function migratePins(pins) {
+        let changed = false;
+        for (const rId in pins) {
+            if (!Array.isArray(pins[rId])) continue;
+            pins[rId] = pins[rId].map(entry => {
+                if (`${entry}`.includes("/")) return entry;
+                changed = true;
+                const known = itemCatalog[parseInt(entry)];
+                return `${(known && known.type) || guessItemType(entry)}/${entry}`;
+            });
+        }
+        return changed;
+    }
     let customNames;
     await chrome.storage.sync.get({ "customNames": {} }).then(r => customNames = r.customNames);
     let favoriteRaids = [];
@@ -414,16 +587,373 @@ window.onload = async (e) => {
         chrome.storage.local.remove(`${getCurrentRaid()}`).then(() => window.location.reload());
     };
 
+    // ── Отладка: сбор сырого трафика игры ────────────────────────────────────
+    // Временный слой под разбор истории боёв: надо увидеть, каким запросом игра
+    // отдаёт «バトル履歴». Пишет все запросы подряд, поэтому по умолчанию выключен.
+    const DEBUG_LOG_KEY = "debugCaptureLog";
+    const dbgToggle = document.getElementById("debug-toggle");
+    const dbgBody = document.getElementById("debug-body");
+    const dbgCheck = document.getElementById("chk-debug-capture");
+    const dbgExport = document.getElementById("btn-debug-export");
+    const dbgClear = document.getElementById("btn-debug-clear");
+    const dbgStats = document.getElementById("debug-stats");
+    let debugLog = [];
+
+    dbgToggle.onclick = () => {
+        dbgBody.hidden = !dbgBody.hidden;
+        dbgToggle.textContent = dbgBody.hidden ? "Debug ▸" : "Debug ▾";
+    };
+
+    const fmtBytes = (n) => n < 1024 ? `${n} B`
+        : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB`
+        : `${(n / (1024 * 1024)).toFixed(2)} MB`;
+
+    function renderDebugStats(log) {
+        debugLog = Array.isArray(log) ? log : [];
+        const bytes = debugLog.length ? JSON.stringify(debugLog).length : 0;
+        dbgStats.textContent = `${debugLog.length} entries · ${fmtBytes(bytes)}`;
+        dbgExport.disabled = debugLog.length === 0;
+        dbgClear.disabled = debugLog.length === 0;
+    }
+
+    chrome.storage.local.get([DEBUG_LOG_KEY, "debugCaptureEnabled"], (res) => {
+        dbgCheck.checked = !!res.debugCaptureEnabled;
+        renderDebugStats(res[DEBUG_LOG_KEY]);
+    });
+
+    // Записи копятся в фоне, пока окно открыто — без подписки счётчик замер бы
+    // до переоткрытия трекера, и было бы непонятно, идёт ли запись вообще
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== "local" || !changes[DEBUG_LOG_KEY]) return;
+        renderDebugStats(changes[DEBUG_LOG_KEY].newValue);
+    });
+
+    dbgCheck.onchange = () => {
+        chrome.runtime.sendMessage({ type: "DEBUG_SET_CAPTURE", enabled: dbgCheck.checked }, () => {
+            if (chrome.runtime.lastError) return;
+        });
+    };
+
+    // Лог доходит до мегабайтов — data: URI, как в download(), на таком объёме
+    // упирается в лимит длины URL, поэтому здесь Blob
+    dbgExport.onclick = () => {
+        const blob = new Blob([JSON.stringify({
+            exportedAt: new Date().toISOString(),
+            entryCount: debugLog.length,
+            entries: debugLog,
+        }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `gbf-debug-capture_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    };
+
+    dbgClear.onclick = () => chrome.storage.local.set({ [DEBUG_LOG_KEY]: [] });
+
+    // ── Бэкафилл лута из истории боёв (バトル履歴) ────────────────────────────
+    const backfillToggle = document.getElementById("backfill-toggle");
+    const backfillBody = document.getElementById("backfill-body");
+    const btnBackfillScan = document.getElementById("btn-backfill-scan");
+    const btnBackfillScanFull = document.getElementById("btn-backfill-scan-full");
+    const btnBackfillNames = document.getElementById("btn-backfill-names");
+    const btnBackfillStop = document.getElementById("btn-backfill-stop");
+    const backfillStatus = document.getElementById("backfill-status");
+    const backfillUnresolved = document.getElementById("backfill-unresolved");
+    const backfillProgress = document.getElementById("backfill-progress");
+    const backfillFill = document.getElementById("backfill-progress-fill");
+    const backfillLabel = document.getElementById("backfill-progress-label");
+
+    // Скан идёт минутами, поэтому фон не отвечает на исходное сообщение, а пишет
+    // ход работы и итог в storage.session — иначе канал закрывался бы раньше
+    // конца работы и окно показывало бы «Extension error» на успешном скане.
+    function applyBackfillState(state) {
+        if (!state || typeof state !== "object") return;
+        const running = !!state.running;
+        btnBackfillScan.disabled = running;
+        btnBackfillScanFull.disabled = running;
+        btnBackfillNames.disabled = running;
+        backfillProgress.hidden = !running;
+        btnBackfillStop.hidden = !running;
+        if (!running) btnBackfillStop.disabled = false;
+
+        if (running) {
+            backfillLabel.textContent = state.label || "";
+            // Пока знаменателя нет (открытие экранов игры) — бегущая полоса
+            const known = Number(state.total) > 1;
+            backfillFill.classList.toggle("indeterminate", !known);
+            backfillFill.style.width = known
+                ? `${Math.min(100, Math.round(Number(state.done) / Number(state.total) * 100))}%`
+                : "";
+            backfillStatus.textContent = state.phase === "names" || state.phase === "items"
+                ? "Looking up item names…" : "Scanning…";
+            return;
+        }
+        if (state.result) showBackfillResult(state.result);
+    }
+
+    // Итог мог прийти, пока окно было закрыто — забираем текущее состояние
+    chrome.runtime.sendMessage({ type: "BACKFILL_GET_STATE" }, (state) => {
+        if (chrome.runtime.lastError) return;
+        applyBackfillState(state);
+    });
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== "session" || !changes.backfillState) return;
+        applyBackfillState(changes.backfillState.newValue);
+    });
+
+    backfillToggle.onclick = () => {
+        backfillBody.hidden = !backfillBody.hidden;
+        backfillToggle.textContent = backfillBody.hidden ? "Backfill from history ▸" : "Backfill from history ▾";
+    };
+
+    // Тот же список, что уже показан в сайдбаре (известные рейды + solo-квесты) —
+    // сопоставление боя из истории выбирается из уже существующих имён,
+    // а не вводится вручную
+    function allKnownRaidOptions() {
+        const seen = new Set();
+        const options = [];
+        knownRaidIDs.forEach((id, i) => {
+            if (seen.has(id)) return;
+            seen.add(id);
+            options.push({ id, name: knownRaidNames[i] });
+        });
+        options.sort((a, b) => a.name.localeCompare(b.name));
+        return options;
+    }
+
+    // «Lu Woh (Impossible)» из истории и «Lu Woh» из таблицы — один и тот же босс,
+    // отличается только приписка сложности
+    const normalizeRaidName = (s) => String(s || "")
+        .replace(/\s*\([^)]*\)\s*$/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+    // Сюда доходит только то, что не легло в QUEST_NAME_TO_ID (фон применяет её
+    // сам). Остаётся грубая сверка с именами боссов, а она неоднозначна: «Lu Woh»
+    // это и рейд шести драконов (305231), и Advent из free quests (103481).
+    // Поэтому подставляем догадку, но применяет её человек кнопкой OK.
+    function guessRaidMatches(chapterName, options) {
+        // На случай, если таблица знает имя, а фон её почему-то не применил
+        const exact = QUEST_NAME_TO_ID[chapterName];
+        if (exact) {
+            const hit = options.find(o => String(o.id) === String(exact));
+            if (hit) return [hit];
+        }
+        const target = normalizeRaidName(chapterName);
+        if (!target) return [];
+        return options.filter(o => normalizeRaidName(o.name) === target);
+    }
+
+    function renderBackfillUnresolved(groups) {
+        backfillUnresolved.innerHTML = "";
+        if (!Array.isArray(groups) || !groups.length) return;
+        const options = allKnownRaidOptions();
+        groups.forEach(g => {
+            const row = document.createElement("div");
+            row.className = "backfill-group";
+
+            const label = document.createElement("span");
+            label.className = "backfill-group-name";
+            label.textContent = g.chapterName || `Boss ${g.bossImage}`;
+            row.appendChild(label);
+
+            const count = document.createElement("span");
+            count.className = "backfill-group-count";
+            count.textContent = `${g.count} battle${g.count === 1 ? "" : "s"}`;
+            row.appendChild(count);
+
+            const select = document.createElement("select");
+            const blank = document.createElement("option");
+            blank.value = "";
+            blank.textContent = "Match to raid…";
+            select.appendChild(blank);
+            options.forEach(o => {
+                const opt = document.createElement("option");
+                opt.value = o.id;
+                opt.textContent = o.name;
+                select.appendChild(opt);
+            });
+
+            const matches = guessRaidMatches(g.chapterName, options);
+            if (matches.length) select.value = matches[0].id;
+            row.appendChild(select);
+
+            // Несколько кандидатов с одинаковым именем — предупреждаем, что
+            // подставленный вариант надо проверить, а не жать OK вслепую
+            if (matches.length > 1) {
+                const warn = document.createElement("span");
+                warn.className = "backfill-group-count";
+                warn.textContent = `${matches.length} same-named raids — check`;
+                row.appendChild(warn);
+            }
+
+            const okBtn = document.createElement("button");
+            okBtn.className = "action-btn";
+            okBtn.textContent = "OK";
+            const skipBtn = document.createElement("button");
+            skipBtn.className = "action-btn";
+            skipBtn.textContent = "Skip";
+
+            // Загрузка боёв идёт в фоне и о себе доложит сама, поэтому строку
+            // убираем сразу — ответ здесь лишь подтверждает, что работа принята
+            const send = (msg) => {
+                select.disabled = true;
+                okBtn.disabled = true;
+                skipBtn.disabled = true;
+                chrome.runtime.sendMessage(msg, (res) => {
+                    if (chrome.runtime.lastError || (res && res.busy)) {
+                        select.disabled = false;
+                        okBtn.disabled = false;
+                        skipBtn.disabled = false;
+                        if (res && res.busy) backfillStatus.textContent = "A scan is already running…";
+                        return;
+                    }
+                    row.remove();
+                });
+            };
+
+            okBtn.disabled = !select.value;
+            select.onchange = () => { okBtn.disabled = !select.value; };
+
+            okBtn.onclick = () => {
+                if (!select.value) return;
+                send({ type: "BACKFILL_MAP", bossImage: g.bossImage, questId: select.value });
+            };
+            row.appendChild(okBtn);
+
+            skipBtn.onclick = () => send({ type: "BACKFILL_MAP", bossImage: g.bossImage, skip: true });
+            row.appendChild(skipBtn);
+
+            backfillUnresolved.appendChild(row);
+        });
+    }
+
+    // Сколько подписей чинил проход по именам. Отдельной кнопкой это весь итог,
+    // после скана — хвост к его строке
+    function nameResultText(n, stopped) {
+        if (!n) return "";
+        // Вид предмета есть только у записей нового разбора: у старых спрашивать
+        // нечем, и такие подписи чинит уже пересканирование, а не эта кнопка
+        const old = n.noKind ? ` ${n.noKind} older entr${n.noKind === 1 ? "y has" : "ies have"} no item kind — rescan those battles.` : "";
+        if (!n.unknown) return old;
+        const left = n.unknown - n.learned;
+        return ` Named ${n.learned} of ${n.unknown} unnamed item${n.unknown === 1 ? "" : "s"}.`
+            + (stopped ? " Stopped." : left ? ` ${left} the game did not name.` : "") + old;
+    }
+
+    function showBackfillResult(res) {
+        if (!res) return;
+        if (res.error) { backfillStatus.textContent = res.error; return; }
+
+        // Итог починки имён — ни страниц, ни импорта в нём нет
+        if (res.pagesScanned === undefined && res.names) {
+            backfillStatus.textContent = nameResultText(res.names, res.stopped).trim()
+                || "Every recorded item already has a name.";
+            return;
+        }
+        // Автозапуск при старте браузера, которому не нашлось работы: молчим,
+        // иначе он затирал бы итог последнего скана
+        if (res.auto) return;
+
+        // Итог сопоставления босса (кнопка OK) — у него нет страниц
+        if (res.pagesScanned === undefined) {
+            const rest = res.stopped ? " Stopped — the rest comes in with the next scan." : "";
+            backfillStatus.textContent = (res.imported
+                ? `Imported ${res.imported} more battle${res.imported === 1 ? "" : "s"}.`
+                : "Mapped — no new loot found.") + rest;
+            return;
+        }
+
+        const range = res.pagesScanned
+            ? `pages ${res.fromPage}–${res.toPage}${res.totalPages ? ` of ${res.totalPages}` : ""}`
+            : "no pages";
+        // В полном режиме позиция курсора видна в статусе: без неё непонятно,
+        // почему следующий скан начинается не с начала истории
+        let tail = "";
+        if (res.stopped) tail = " Stopped — the next full scan continues from this page.";
+        else if (res.hitKnown) tail = " Reached battles already recorded.";
+        else if (res.wrapped) tail = res.full
+            ? " Reached the end of your history — next full scan starts over."
+            : " Reached the end of your history.";
+        else if (res.full) tail = " Click “Scan all history” again to continue further back.";
+        const learned = res.autoMapped
+            ? ` Matched ${res.autoMapped} boss${res.autoMapped === 1 ? "" : "es"} from battles you already track.`
+            : "";
+        backfillStatus.textContent = `Scanned ${range}, imported ${res.imported} battle${res.imported === 1 ? "" : "s"}.${learned}${tail}`
+            + nameResultText(res.names, res.stopped);
+        renderBackfillUnresolved(res.unresolved);
+    }
+
+    function runBackfillScan(mode) {
+        backfillStatus.textContent = "Scanning…";
+        chrome.runtime.sendMessage({ type: "BACKFILL_SCAN", mode }, (res) => {
+            if (chrome.runtime.lastError) {
+                backfillStatus.textContent = "Could not reach the extension — reload it and try again.";
+                return;
+            }
+            if (res && res.busy) backfillStatus.textContent = "A scan is already running…";
+        });
+    }
+
+    btnBackfillScan.onclick = () => runBackfillScan("recent");
+    btnBackfillScanFull.onclick = () => runBackfillScan("full");
+
+    btnBackfillNames.onclick = () => {
+        backfillStatus.textContent = "Looking up item names…";
+        chrome.runtime.sendMessage({ type: "BACKFILL_NAMES" }, (res) => {
+            if (chrome.runtime.lastError) {
+                backfillStatus.textContent = "Could not reach the extension — reload it and try again.";
+                return;
+            }
+            if (res && res.busy) backfillStatus.textContent = "A scan is already running…";
+        });
+    };
+
+    // Флаг читается между запросами, поэтому останавливается скан не мгновенно —
+    // гасим кнопку сразу, чтобы по ней не жали второй раз
+    btnBackfillStop.onclick = () => {
+        btnBackfillStop.disabled = true;
+        backfillStatus.textContent = "Stopping…";
+        chrome.runtime.sendMessage({ type: "BACKFILL_STOP" }, () => {
+            if (chrome.runtime.lastError) btnBackfillStop.disabled = false;
+        });
+    };
+
     if (isFavoritesLast) {
         document.getElementById("btn-favorites-tab").dispatchEvent(new Event("click"));
     } else if (lastRaidBtn) {
         lastRaidBtn.dispatchEvent(new Event("click"));
     }
 
+    // Имя в записи боя не хранится — трекер подставляет его при отрисовке из
+    // справочников. В выгрузке подставлять некому, поэтому у лута из истории в
+    // файле оставались одни номера; проставляем имена прямо в дамп.
+    function withItemNames(raid) {
+        const out = {};
+        for (const k in raid) {
+            const session = raid[k];
+            if (!session || typeof session !== "object") { out[k] = session; continue; }
+            const copy = { ...session };
+            for (const chestKey of LOOT_CHEST_KEYS) {
+                if (!Array.isArray(copy[chestKey])) continue;
+                copy[chestKey] = copy[chestKey].map(item =>
+                    item.name ? item : { ...item, name: itemName(item) });
+            }
+            out[k] = copy;
+        }
+        return out;
+    }
+
     function download(e) {
         console.log("raid", getCurrentRaid())
         console.log("raidData", raidData);
-        let json = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(raidData[getCurrentRaid()]));
+        let json = "data:text/json;charset=utf-8,"
+            + encodeURIComponent(JSON.stringify(withItemNames(raidData[getCurrentRaid()])));
 
         var link = document.createElement("a");
         link.setAttribute("href", json);
@@ -484,7 +1014,9 @@ window.onload = async (e) => {
                 if (session[16]) chestData.greenChests.push(session[16]);
                 if (session[90]) chestData.artifacts.push(session[90]);
             });
-            displayLoot(chestData, container, totalKills, rId);
+            // pinCtx несёт stats и chestTotals — из них строки предметов берут
+            // историю дропов, без него populateChests падал на ctx.stats
+            displayLoot(chestData, container, totalKills, rId, pinCtx);
         }
     }
 
@@ -503,43 +1035,73 @@ window.onload = async (e) => {
                 chestTotals[chestKey] = (chestTotals[chestKey] || 0) + 1;
                 const seen = new Set();
                 session[chestKey].forEach(item => {
-                    const id = parseInt(item.id);
-                    if (!Number.isFinite(id)) return;
-                    if (!stats[id]) {
-                        stats[id] = { id: item.id, type: item.type, name: item.name, count: 0, byChest: {} };
+                    if (!Number.isFinite(parseInt(item.id))) return;
+                    const key = itemKey(item);
+                    if (!stats[key]) {
+                        stats[key] = { id: item.id, type: item.type, kind: item.kind, name: item.name, count: 0, byChest: {} };
                     }
-                    if (!stats[id].byChest[chestKey]) stats[id].byChest[chestKey] = { count: 0, drops: 0, lastAt: 0 };
-                    const perChest = stats[id].byChest[chestKey];
+                    if (!stats[key].byChest[chestKey]) stats[key].byChest[chestKey] = { count: 0, drops: 0, at: [] };
+                    const perChest = stats[key].byChest[chestKey];
                     const n = parseInt(item.count) || 0;
-                    stats[id].count += n;
+                    stats[key].count += n;
                     perChest.count += n;
                     // Один и тот же предмет может лежать в сундуке несколькими стопками
-                    if (!seen.has(id)) {
-                        seen.add(id);
+                    if (!seen.has(key)) {
+                        seen.add(key);
                         perChest.drops++;
+                        // Номер сундука, в котором предмет выпал. Раньше хранился только
+                        // последний — и «сколько назад упал» был единственным, что о
+                        // предмете можно было спросить. Весь ряд даёт ещё и промежутки
+                        // между дропами, а по ним видно, обычная это засуха или нет.
+                        perChest.at.push(chestTotals[chestKey]);
                     }
-                    perChest.lastAt = chestTotals[chestKey];
                 });
             });
         });
         return { stats, chestTotals };
     }
 
-    function displayLoot(data, container, totalKills, rId) {
+    // Всплывающая история для пина: в самой плашке места нет, а разворачивать её
+    // как строку сундука некуда — пины лежат в одну линию
+    function showDropHistory(e, item, st, ctx) {
+        e.preventDefault();
+        e.stopPropagation(); // иначе document.onclick закроет попап тем же кликом
+        pinContextMenu.style.display = "none";
+        const chestKey = st ? primaryChest(st, ctx.chestTotals) : null;
+        const chest = chestKey === null ? null : CHEST_META[chestKey];
+        const opened = chestKey === null ? ctx.totalKills : ctx.chestTotals[chestKey];
+
+        historyPopup.innerHTML = "";
+        const title = document.createElement("div");
+        title.className = "popup-title";
+        title.textContent = itemLabel(item);
+        historyPopup.appendChild(title);
+        historyPopup.appendChild(buildDropHistory(
+            chestKey === null ? null : st.byChest[chestKey], opened, chest ? chest.label : "kills"));
+
+        // Показываем до замера размеров, иначе offsetWidth нулевой
+        historyPopup.style.display = "block";
+        historyPopup.style.left = `${Math.max(4, Math.min(e.clientX, window.innerWidth - historyPopup.offsetWidth - 8))}px`;
+        historyPopup.style.top = `${Math.max(4, Math.min(e.clientY, window.innerHeight - historyPopup.offsetHeight - 8))}px`;
+    }
+
+    function displayLoot(data, container, totalKills, rId, ctx) {
         const sections = [];
-        const addChests = (title, chests) => {
+        // Ключ сундука нужен строкам предметов: история дропов считается внутри
+        // одного типа сундука, между типами промежутки несопоставимы
+        const addChests = (title, chestKey, chests) => {
             if (chests && chests.length > 0) {
-                sections.push(populateChests(title, processLoot(chests), chests.length, totalKills, rId));
+                sections.push(populateChests(title, chestKey, processLoot(chests), chests.length, totalKills, rId, ctx));
             }
         };
 
-        addChests("Blue Chests", data.blueChests);
-        addChests("Green Chests", data.greenChests);
-        addChests("Purple Chests", data.purpleChests);
-        addChests("Red Chests", data.redChests);
-        addChests("Gold Chests", data.goldChests);
-        addChests("Silver Chests", data.silverChests);
-        addChests("Wood Chests", data.woodChests);
+        addChests("Blue Chests", 11, data.blueChests);
+        addChests("Green Chests", 16, data.greenChests);
+        addChests("Purple Chests", 13, data.purpleChests);
+        addChests("Red Chests", 4, data.redChests);
+        addChests("Gold Chests", 3, data.goldChests);
+        addChests("Silver Chests", 2, data.silverChests);
+        addChests("Wood Chests", 1, data.woodChests);
         if (data.artifacts && data.artifacts.length > 0) {
             sections.push(processArtifacts(data.artifacts, rId));
         }
@@ -554,12 +1116,13 @@ window.onload = async (e) => {
         const lootMap = new Map();
         chests.forEach(chest => {
             chest.forEach(item => {
-                if (!lootMap.has(item.id)) {
-                    lootMap.set(item.id, { ...item, count: 0, drops: {} });
+                const key = itemKey(item);
+                if (!lootMap.has(key)) {
+                    lootMap.set(key, { ...item, count: 0, drops: {} });
                 }
-                lootMap.get(item.id).count++;
-                if (!lootMap.get(item.id).drops[item.count]) lootMap.get(item.id).drops[item.count] = 0;
-                lootMap.get(item.id).drops[item.count]++;
+                lootMap.get(key).count++;
+                if (!lootMap.get(key).drops[item.count]) lootMap.get(key).drops[item.count] = 0;
+                lootMap.get(key).drops[item.count]++;
             });
         });
         return Array.from(lootMap.values());
@@ -609,7 +1172,7 @@ window.onload = async (e) => {
         return { el: section, height: () => 26 + (isCollapsed(rId, "Artifacts") ? 0 : rows * 46) };
     }
 
-    function populateChests(title, loot, drops, totalKills, rId) {
+    function populateChests(title, chestKey, loot, drops, totalKills, rId, ctx) {
         const dropRate = (drops / totalKills * 100).toFixed(1);
 
         const section = document.createElement("div");
@@ -631,25 +1194,39 @@ window.onload = async (e) => {
         loot.sort((a, b) => b.percentage - a.percentage).forEach(item => {
             const img = itemIcon(item);
             const itemCount = Object.keys(item.drops).map(i => i * item.drops[i]).reduce((acc, n) => acc + parseInt(n), 0);
-            const hasDetails = Object.keys(item.drops).length > 1;
+            const hasSizes = Object.keys(item.drops).length > 1;
+            // История дропов есть у всего, что вообще падало, — раскрывается теперь
+            // и то, что раньше не раскрывалось (одна стопка, но пять находок)
+            const perChest = (ctx.stats[itemKey(item)] || {}).byChest;
+            const history = perChest && perChest[chestKey];
+            const expandable = hasSizes || !!(history && history.at.length);
 
             const row = document.createElement("div");
-            row.className = "item-row" + (hasDetails ? " has-details" : "");
-            row.innerHTML = `<img class="item-img" src="${esc(img)}" title="${esc(item.name)}">
-                <span class="item-name" title="${esc(item.name)}">${esc(item.name)}</span>
+            row.className = "item-row" + (expandable ? " has-details" : "");
+            row.innerHTML = `<img class="item-img" src="${esc(img)}" title="${esc(itemLabel(item))}">
+                <span class="item-name" title="${esc(itemLabel(item))}">${esc(itemLabel(item))}</span>
                 <span class="item-count">x${esc(itemCount)}</span>
                 <span class="item-pct">${esc(item.percentage)}%</span>
-                ${hasDetails ? '<span class="item-expand fa fa-caret-right"></span>' : ''}`;
+                ${expandable ? '<span class="item-expand fa fa-caret-right"></span>' : ''}`;
 
-            if (hasDetails) {
+            if (expandable) {
                 const details = document.createElement("div");
                 details.className = "item-details";
-                details.innerHTML = Object.keys(item.drops).map(drop =>
-                    `<div class="detail-row"><span>x${esc(drop)}</span><span>${esc(item.drops[drop])} &mdash; ${(item.drops[drop] / drops * 100).toFixed(2)}%</span></div>`
-                ).join("");
+                if (history && history.at.length) {
+                    details.appendChild(buildDropHistory(history, drops, CHEST_META[chestKey].label));
+                }
+                if (hasSizes) {
+                    const sizes = document.createElement("div");
+                    sizes.className = "detail-sizes";
+                    sizes.innerHTML = Object.keys(item.drops).map(drop =>
+                        `<div class="detail-row"><span>x${esc(drop)}</span><span>${esc(item.drops[drop])} &mdash; ${(item.drops[drop] / drops * 100).toFixed(2)}%</span></div>`
+                    ).join("");
+                    details.appendChild(sizes);
+                }
                 row.onclick = () => {
                     row.classList.toggle("open");
                     details.classList.toggle("visible");
+                    relayoutAll(); // раскрытая история меняет высоту колонки
                 };
                 body.appendChild(row);
                 body.appendChild(details);
@@ -660,7 +1237,12 @@ window.onload = async (e) => {
         });
         section.appendChild(body);
         const rows = loot.length;
-        return { el: section, height: () => 26 + (isCollapsed(rId, title) ? 0 : rows * 38) };
+        // Пока секция в документе, меряем её по-настоящему: раскрытая история
+        // выше строки в разы, и на глазок колонки разъезжались бы
+        return {
+            el: section,
+            height: () => section.isConnected ? section.offsetHeight : 26 + (isCollapsed(rId, title) ? 0 : rows * 38),
+        };
     }
 
     function layoutColumns(host, items) {
@@ -713,7 +1295,7 @@ window.onload = async (e) => {
     function pinItemContextMenu(e, item, rId) {
         e.preventDefault();
         e.stopPropagation();
-        const itemId = parseInt(item.id);
+        const itemId = itemKey(item);
 
         pinContextMenu.style.display = "block";
         pinContextMenu.style.left = `${e.clientX}px`;
@@ -801,40 +1383,67 @@ window.onload = async (e) => {
         // Предмет мог ни разу не выпасть в этом рейде — тогда имя и тип берём из общего
         // каталога, иначе пин молча исчезал бы, хотя «x0 за 419 синих сундуков» и есть
         // тот ответ, ради которого его пинили
-        const item = st || itemCatalog[itemId] || { id: itemId, type: "item/article", name: `#${itemId}` };
+        const item = st || itemCatalogByKey[itemId] || itemFromKey(itemId);
         const chestKey = st ? primaryChest(st, ctx.chestTotals) : null;
         const chest = chestKey === null ? null : CHEST_META[chestKey];
         const perChest = chestKey === null ? null : st.byChest[chestKey];
         const opened = chestKey === null ? ctx.totalKills : ctx.chestTotals[chestKey];
         const drops = perChest ? perChest.drops : 0;
-        const since = perChest ? opened - perChest.lastAt : opened;
+        const since = perChest ? opened - lastDropAt(perChest) : opened;
         const unit = chest ? chest.label : "kills";
 
         const el = document.createElement("div");
         el.className = "pin-item" + (drops ? "" : " pin-empty");
-        el.id = `i-${itemId}`;
+        el.id = `i-${itemId}`.replace(/\//g, "-"); // в ключе есть «/», в id элемента ему не место
         if (drops) {
             const perDrop = opened / drops;
-            el.title = `${item.name} — x${st.count} total · dropped from ${drops} of ${opened} ${unit}`
-                + ` (1 per ${perDrop.toFixed(1)}) · last drop ${since} ${unit} ago`;
+            // Хвост промежутков прямо в подсказке: обычно только он и нужен, а за
+            // полной историей — клик
+            const tail = dropGaps(perChest).slice(-5).join(" · ");
+            el.title = `${itemLabel(item)} — x${st.count} total · dropped from ${drops} of ${opened} ${unit}`
+                + ` (1 per ${perDrop.toFixed(1)}) · last drop ${since} ${unit} ago`
+                + `\nlast gaps: ${tail} · now ${since} — click for all`;
             // Засуха вдвое длиннее обычного интервала — стоит подсветить
             if (since > perDrop * 2) el.classList.add("pin-dry");
         } else {
-            el.title = `${item.name} — never dropped in ${opened} ${unit}`;
+            el.title = `${itemLabel(item)} — never dropped in ${opened} ${unit}`;
         }
         el.innerHTML = `<img src="${esc(itemIcon(item))}"> <span class="pin-count">x${esc(st ? st.count : 0)}</span>
             <span class="pin-since">${chest && chest.icon ? `<img src="${esc(chest.icon)}">` : ""}${esc(since)}</span>`;
         el.oncontextmenu = (e) => pinItemContextMenu(e, item, ctx.rId);
+        el.onclick = (e) => showDropHistory(e, item, st, ctx);
         return el;
     }
 
-    // Автоматически обновляем UI при появлении новых данных из игры
+    // Перерисовка по одному пришедшему имени — фон узнаёт их по одному, раз в
+    // секунду с небольшим, и каждое имя дёргало бы весь экран. Ждём, пока поток
+    // имён прекратится, и рисуем один раз.
+    let namesRedrawTimer = null;
+    function redrawAfterNames() {
+        clearTimeout(namesRedrawTimer);
+        namesRedrawTimer = setTimeout(() => {
+            const rId = getCurrentRaid();
+            // null — открыты Favorites; иначе перерисовываем только тот рейд, по
+            // которому есть данные (до выбора вкладки currentRaid не рейд, а {})
+            if (rId === null) document.getElementById("btn-favorites-tab").dispatchEvent(new Event("click"));
+            else if (rId && raidData[rId]) buildRaidInfo({ ...raidData[rId], name: currentRaidName });
+        }, 1500);
+    }
+
     // Автоматически обновляем UI при появлении новых данных из игры
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
-        
+
         let shouldUpdateFavorites = false;
         const currentRaidId = getCurrentRaid();
+
+        // Справочник имён приходит от фона по ходу скана — подхватываем сразу,
+        // чтобы подписи появлялись, пока он идёт
+        if (changes.itemNames && changes.itemNames.newValue) {
+            const n = changes.itemNames.newValue;
+            itemNames = { byKind: n.byKind || {}, byType: n.byType || {}, byId: n.byId || {} };
+            redrawAfterNames();
+        }
 
         for (let k in changes) {
             if (/^\d+$/.test(k)) {
